@@ -5,12 +5,133 @@
  * @help        :: See http://sailsjs.org/#!/documentation/concepts/Controllers
  */
 
+// libs
+var Promise = require('bluebird');
+var util = require('util');
 var json2csv = require('json2csv');
-var Promise  = require('bluebird');
-var moment   = require('moment');
-var async    = require('async');
+var moment = require('moment');
+var async = require('async');
+var _under = require('underscore');
+  
+// project controller
+var ProjectController = {
 
-module.exports = {
+  // TASKS
+
+  // parse results from sails
+  set_result: function( result ) {
+    if( util.isArray( result ) ) {
+      // update ( array )
+      return result[0];
+    } else { 
+      // create ( object )
+      return result;
+    }
+  },
+
+  // return reports for a project
+  getProjectReports: function( project, cb ) {
+
+    // dates
+    var project_start = moment( project.project_start_date ).startOf( 'M' ),
+        project_end = moment( project.project_end_date ).endOf( 'M' ),
+        reports_start = moment(project.project_start_date).startOf('Y')>=moment('2017-01-01')?moment(project.project_start_date).startOf('Y'):moment('2017-01-01'),
+        reports_end = moment().endOf( 'M' );
+
+    // variables
+    var reports = [],
+        s_date = project_start, // reports_start, // project_start.format('YYYY-MM-DD') > reports_start.format('YYYY-MM-DD') ? project_start : reports_start,
+        e_date = reports_end; // project_end.format('YYYY-MM-DD') < reports_end.format( 'YYYY-MM-DD' ) ? project_end : reports_end;
+
+    // number of reports
+    var reports_duration = moment.duration( e_date.diff( s_date ) ).asMonths().toFixed(0);
+
+    // reports_duration array
+    var reports_array = Array( parseInt( reports_duration ) ).fill( 1 );
+
+    // async loop target_beneficiaries
+    var m = 0
+    async.each( reports_array, function ( reports_item, next ) {
+      
+      // report_status pending if dates before project start date
+      var report_status = moment( s_date ).add( m, 'M' ).set( 'date', 1 ).format() >= project_start.format() ? 'todo' : 'pending';
+      
+      // create report
+      var report = {
+        project_id: project.id,
+        report_status: report_status,
+        report_active: true,
+        report_month: moment( s_date ).add( m, 'M' ).month(),
+        report_year: moment( s_date ).add( m, 'M' ).year(),
+        reporting_period: moment( s_date ).add( m, 'M' ).set( 'date', 1 ).format(),
+        reporting_due_date: moment( s_date ).add( m+1, 'M' ).set( 'date', 10 ).format()
+      };
+
+      // clone project
+      var p = JSON.parse( JSON.stringify( project ) );
+      delete p.id;
+
+      // add report with p to reports
+      reports.push( _under.extend( {}, p, report ) );
+
+      // increase month counter
+      m++;
+
+      // next
+      next();
+
+    }, function ( err ) {
+      if ( err ) return cb( err, false );
+      // return the reports for the project period
+      return cb( false, reports );
+    });
+
+  },  
+
+  // return locations for reports
+  getProjectReportLocations: function( reports, target_locations, cb ){
+
+    // report locations
+    var locations = [];
+
+    // async loop target_beneficiaries
+    async.each( reports, function ( report, next ) {
+
+      // clone report
+      var r = JSON.parse( JSON.stringify( report ) );
+
+      // prepare report for cloning
+      r.report_id = r.id.valueOf();
+      delete r.id;
+
+      // async loop target_beneficiaries
+      async.each( target_locations, function ( target_location, tl_next ) {
+
+        // prepare report for cloning
+        var l = JSON.parse( JSON.stringify( target_location ) );
+        l.target_location_reference_id = l.id.valueOf();
+        delete l.id;
+
+        // push to locations
+        locations.push( _under.extend( {}, r, l ) );
+
+        // tl next
+        tl_next();
+
+      }, function ( err ) {
+        if ( err ) return cb( err, false );
+        next();
+      });
+
+    }, function ( err ) {
+      if ( err ) return cb( err, false );
+      return cb( false, locations );
+    });
+
+  },
+
+
+  // REST APIs
 
   // get all Projects by organization
   getProjectsList: function(req, res) {
@@ -195,8 +316,8 @@ module.exports = {
     // do response
     _doResponse : function($project){
       if (csv) {
-        var fields = [ 'cluster', 'organization', 'admin0name', 'id', 'project_status', 'name', 'email', 'phone','project_title', 'project_description', 'project_hrp_code', 'project_start_date', 'project_end_date', 'project_budget', 'project_budget_currency', 'project_donor_list' , 'implementing_partners','strategic_objectives_list', 'beneficiary_type_list','activity_type_list','target_beneficiaries_list', 'target_locations_list','createdAt']
-        fieldNames = [ 'Cluster', 'Organization', 'Country', 'Project ID', 'Project Status', 'Focal Point', 'Email', 'Phone', 'Project Title', 'Project Description', 'HRP Project Code', 'project_start_date', 'project_end_date', 'Project Budget', 'Project Budget Currency', 'Project Donors'  ,  'Implementing Partners', 'Strategic Objectives', 'Beneficiary types','Activity types','Target Beneficiaries', 'Target locations','Created' ];
+        var fields = [ 'cluster', 'organization', 'admin0name', 'id', 'project_status', 'name', 'email', 'phone','project_title', 'project_description', 'project_hrp_code', 'project_start_date', 'project_end_date', 'project_budget', 'project_budget_currency', 'project_donor_list' , 'implementing_partners_list','strategic_objectives_list', 'beneficiary_type_list','activity_type_list','target_beneficiaries_list','undaf_desarrollo_paz_list','acuerdos_de_paz_list','dac_oecd_development_assistance_committee_list','ods_objetivos_de_desarrollo_sostenible_list', 'target_locations_list','createdAt']
+        fieldNames = [ 'Cluster', 'Organization', 'Country', 'Project ID', 'Project Status', 'Focal Point', 'Email', 'Phone', 'Project Title', 'Project Description', 'HRP Project Code', 'project_start_date', 'project_end_date', 'Project Budget', 'Project Budget Currency', 'Project Donors'  ,  'Implementing Partners', 'Strategic Objectives', 'Beneficiary types','Activity types','Target Beneficiaries', 'Undaf Desarrollo Paz','Acuerdos de Paz','DAC - OECD Development Assistance Committee','ODS - Objetivos de Desarrollo Sostenible','Target locations','Created' ];
         $project = this._projectJson2Csv($project);
 
         json2csv({ data: $project, fields: fields, fieldNames: fieldNames }, function( err, csv ) {
@@ -239,15 +360,22 @@ module.exports = {
           };
         // takes subdocuments key and produces flattened list of its values ->key_list
         var updateJson = function(project){
+            setKey( project, 'implementing_partners','implementing_partners_list',['organization_name']);
             setKey( project, 'strategic_objectives', 'strategic_objectives_list', ['objective_type_name', 'objective_type_description'] );
             setKey( project, 'beneficiary_type', 'beneficiary_type_list', ['beneficiary_type_name'] );
             setKey( project, 'project_donor', 'project_donor_list', ['project_donor_name'] );
             setKey( project, 'activity_type', 'activity_type_list', ['cluster', 'activity_type_name']  );
             setKey( project, 'inter_cluster_activities', 'inter_cluster_activities_list', ['cluster']  );
             setKey( project, 'activity_type', 'activity_type_list', ['cluster', 'activity_type_name']  );
-            setKey( project, 'target_beneficiaries', 'target_beneficiaries_list', ['beneficiary_type_name', 'activity_type_name', 'activity_description_name', 'delivery_type_name',
+            setKey( project, 'target_beneficiaries', 'target_beneficiaries_list', ['beneficiary_type_name', 'beneficiary_category_name', 'activity_type_name', 'activity_description_name','indicator_name','strategic_objective_name','strategic_objective_description','sector_objective_name','sector_objective_description','delivery_type_name',
             'key:units', 'key:cash_amount', 'key:households', 'key:sessions', 'key:families', 'key:boys', 'key:girls', 'key:men', 'key:women', 'key:elderly_men', 'key:elderly_women', 'key:unit_type_id' ]  );
-            setKey( project, 'target_locations', 'target_locations_list', ['admin0name', 'admin1name','key:admin1pcode','admin2name','key:admin2pcode','site_name','key:admin2lng','key:admin2lat', 'key:conflict','key:name', 'email']  );
+            setKey(project, 'undaf_desarrollo_paz','undaf_desarrollo_paz_list', ['code','name_tag','description'] ),
+            setKey(project, 'acuerdos_de_paz','acuerdos_de_paz_list',['code','name_tag','description']),
+            setKey(project, 'dac_oecd_development_assistance_committee','dac_oecd_development_assistance_committee_list',['code','name_tag','description']),
+            setKey(project, 'ods_objetivos_de_desarrollo_sostenible','ods_objetivos_de_desarrollo_sostenible_list',['code','name_tag','description']),
+
+
+            setKey( project, 'target_locations', 'target_locations_list', ['admin0name', 'admin1name','key:admin1pcode','admin2name','key:admin2pcode','site_implementation_name','site_type_name','site_name','key:admin2lng','key:admin2lat', 'key:conflict','key:name', 'email']  );
 
         };
 
@@ -267,107 +395,103 @@ module.exports = {
     }
 
     // project for UI
-    var $project = {};
+    var project = {
+      project_budget_progress: [],
+      target_beneficiaries: [],
+      target_locations: []
+    };
+    var project_budget_progress;
+    var target_beneficiaries;
+    var target_locations;
 
-    // get project by organization_id
-    Project
-      .findOne( { id: req.param('id') } )
-      .exec( function( err, project ){
+    // promise
+    Promise.all([
+      Project.find( { id: req.param('id') } ),
+      BudgetProgress.find( { project_id: req.param('id') } ),
+      TargetBeneficiaries.find( { project_id: req.param('id') } ),
+      TargetLocation.find( { project_id: req.param('id') } )
+    ])
+    .catch( function( err ) {
+      return res.negotiate( err );
+    })
+    .then( function( result ) {
 
-        // return error
-        if ( err ) return res.negotiate( err );
+      // gather results
+      if ( result[ 0 ][ 0 ] ) {
+        project = result[ 0 ][ 0 ];
+        project_budget_progress = result[ 1 ];
+        target_beneficiaries = result[ 2 ];
+        target_locations = result[ 3 ];
+      }
 
-        if ( !project ) return res.json( 200, [] );
+      // create project
+      project.project_budget_progress = project_budget_progress;
+      project.target_beneficiaries = target_beneficiaries;
+            
+      project.target_locations = target_locations;
 
-        // clone project to update
-        $project = project;
+      project.target_locations.forEach( function(location,element2){
 
-        // budget
-        BudgetProgress
-          .find({ project_id: $project.id })
-          .exec( function( err, budgetprogress ){
+      if(typeof(location.implementing_partners) === 'string'){
+       
+        var newarray = location.implementing_partners.split(",");
+               location.implementing_partners= [];
 
-          // return error
-          if (err) return res.json({ err: true, error: err });
+               newarray.forEach( function(imppartner,element2){
 
-          // set
-          $project.project_budget_progress = budgetprogress;
-
-          // order dates
-          $project.project_budget_progress.sort(function(a, b) {
-            return a.id > b.id;
-          });
-
-          // target beneficiaries
-          TargetBeneficiaries
-            .find({ project_id: $project.id })
-            .exec( function( err, target_beneficiaries ){
-
-            // return error
-            if (err) return res.json({ err: true, error: err });
-
-            // set
-            $project.target_beneficiaries = target_beneficiaries;
-
-            // sort by id
-            $project.target_beneficiaries.sort( function( a, b ) {
-              return a.id.localeCompare( b.id );
-            });
-
-            // target beneficiaries
-            TargetLocation
-              .find({ project_id: $project.id })
-              .exec( function( err, target_locations ){
-
-              // return error
-              if (err) return res.json({ err: true, error: err });
-
-              // set
-              $project.target_locations = target_locations;
-
-              // order
-              $project.target_locations.sort(function(a, b) {
-                if ( a.site_type_name ) {
-                  if( a.admin3name ) {
-                    return a.admin1name.localeCompare(b.admin1name) ||
-                            a.admin2name.localeCompare(b.admin2name) ||
-                            a.admin3name.localeCompare(b.admin3name) ||
-                            a.site_type_name.localeCompare(b.site_type_name) ||
-                            a.site_name.localeCompare(b.site_name);
-                  } else {
-                    return a.admin1name.localeCompare(b.admin1name) ||
-                            a.admin2name.localeCompare(b.admin2name) ||
-                            a.site_type_name.localeCompare(b.site_type_name) ||
-                            a.site_name.localeCompare(b.site_name);
-                  }
-                } else {
-                  if( a.admin3name ) {
-                    return a.admin1name.localeCompare(b.admin1name) ||
-                            a.admin2name.localeCompare(b.admin2name) ||
-                            a.admin3name.localeCompare(b.admin3name) ||
-                            a.site_name.localeCompare(b.site_name);
-                  } else {
-                    return a.admin1name.localeCompare(b.admin1name) ||
-                            a.admin2name.localeCompare(b.admin2name) ||
-                            a.site_name.localeCompare(b.site_name);
-                  }
+                var imppartnermayus = imppartner.toUpperCase();
+                
+                var imppartnerpush =
+                {
+                  organization_name : imppartner,
+                  organization : imppartnermayus,
                 }
-              });
+                
+                location.implementing_partners.push(imppartnerpush);
+                
+                }
+              );
+        
+      }
+     });
 
-              // return Project
-              return res.json( 200, $project );
+      
+      if(typeof(project.implementing_partners) === 'string'){
+        // implementing_partners string to array
 
-            });
+        var newarray = project.implementing_partners.split(",");
+           project.implementing_partners = [];
 
-          });
 
-        });
+              newarray.forEach( function(imppartner,element2){
 
-      });
+                var imppartnermayus = imppartner.toUpperCase();
+
+                var imppartnerpush =
+                {
+                  organization_name : imppartner,
+                  organization : imppartnermayus,
+                }
+                
+                project.implementing_partners.push(imppartnerpush);
+                
+                }
+              );
+
+         }else if(!project.implementing_partners){
+
+               project.implementing_partners = [];
+    
+            }
+
+      // return Project
+      return res.json( 200, project );
+
+    });
 
   },
 
-  // set project details
+  // set project details ( UNDER CONSTRUCTION )
   setProjectById: function(req, res) {
 
     // request input
@@ -376,162 +500,174 @@ module.exports = {
     }
 
     // get project
-    var $project = req.param('project'),
-        $status = req.param('project').project_status,
-        $project_budget_progress = req.param('project').project_budget_progress,
-        $target_beneficiaries = req.param('project').target_beneficiaries,
-        $target_locations = req.param('project').target_locations;
+    var project = req.param('project');
+    var project_budget_progress = req.param('project').project_budget_progress;
+    var target_beneficiaries = req.param('project').target_beneficiaries;
+    var target_locations = req.param('project').target_locations;
+
     // update project status if new
-    if( $status === 'new' ){
-      $project.project_status = 'active';
+    if( project.project_status === 'new' ){
+      project.project_status = 'active';
     }
 
-    // update or create
-    Project
-      .updateOrCreate( $project, function( err, project ){
+    // find project
+    var findProject = {
+      project_id: project.id
+    }
 
-      // return error
-      if (err) return res.json({ err: true, error: err });
+    // user object to update tables
+    var updateUser = {
+      username: project.username,
+      name: project.name,
+      position: project.position,
+      phone: project.phone,
+      email: project.email
+    }
 
-      // clone project to update
-      $project = project;
+    // promise
+    Promise.all([
+      Project.updateOrCreate( { id: project.id }, project ),
+      // budget_progress, target_beneficiaries, target_locations, report, location ( below )
+      Beneficiaries.update( findProject, updateUser ),
+      Trainings.update( findProject, updateUser ),
+      TrainingParticipants.update( findProject, updateUser )
+    ])
+    .catch( function( err ) {
+      return res.negotiate( err );
+    })
+    .then( function( update_result ) {
 
-      // target beneficiaries
-      BudgetProgress
-        .updateOrCreateEach( { project_id: $project.id }, $project_budget_progress, function( err, project_budget_progress ){
+      // update_project
+      var project_update = ProjectController.set_result( update_result[ 0 ] );
+      var project_update_copy = JSON.parse( JSON.stringify( project_update ) );
+      delete project_update_copy.id;
 
-        // return error
-        if (err) return res.json({ err: true, error: err });
+      // project update
+      findProject = { project_id: project_update.id }
+      project_update.project_budget_progress = [];
+      project_update.target_beneficiaries = [];
+      project_update.target_locations = [];
 
-        // set
-        $project.project_budget_progress = project_budget_progress;
+      // reports holder
+      var reports = [];
 
-        // order dates
-        $project.project_budget_progress.sort(function(a, b) {
-          return a.id > b.id;
+      // async
+      var target_locations_counter = 0;
+      var target_reports_counter = 0;
+      var async_counter = 0;
+      var async_requests = 5;
+
+      // return the project_update
+      var returnProject = function() {
+        // make locations
+        if ( target_locations_counter && target_reports_counter ) {
+          target_locations_counter = 0;
+          target_reports_counter = 0;
+          setLocations();
+        }
+        // ++
+        async_counter++;
+        if ( async_counter === async_requests ) {
+          return res.json( 200, project_update );
+        }
+      }
+
+      // ASYNC REQUEST 1
+      // async loop target_beneficiaries
+      async.each( project_budget_progress, function ( d, next ) {
+        var budget = _under.extend( {}, project_update_copy, d );
+        BudgetProgress.updateOrCreate( findProject, { id: budget.id }, budget ).exec(function( err, result ){
+          project_update.project_budget_progress.push( ProjectController.set_result( result ) );
+          next();
         });
+      }, function ( err ) {
+        if ( err ) return err;
+        returnProject();
+      });
 
-        // target beneficiaries
-        TargetBeneficiaries
-          .updateOrCreateEach( { project_id: $project.id }, $target_beneficiaries, function( err, target_beneficiaries ){
+      // ASYNC REQUEST 2
+      // async loop target_beneficiaries
+      async.each( target_beneficiaries, function ( d, next ) {
+        var t_beneficiary = _under.extend( {}, project_update_copy, d );
+        TargetBeneficiaries.updateOrCreate( findProject, { id: t_beneficiary.id }, t_beneficiary ).exec(function( err, result ){
+          project_update.target_beneficiaries.push( ProjectController.set_result( result ) );
+          next();
+        });
+      }, function ( err ) {
+        if ( err ) return err;
+        returnProject();
+      });
 
-          // return error
-          if (err) return res.json({ err: true, error: err });
+      // ASYNC REQUEST 3
+      // async loop target_locations
+      async.each( target_locations, function ( d, next ) {
+        var t_location = _under.extend( {}, project_update_copy, d );
+        TargetLocation.updateOrCreate( findProject, { id: t_location.id }, t_location ).exec(function( err, result ){
+          project_update.target_locations.push( ProjectController.set_result( result ) );
+          next();
+        });
+      }, function ( err ) {
+        if ( err ) return err;
+        target_locations_counter++;
+        returnProject();
+      });
 
-          // set
-          $project.target_beneficiaries = target_beneficiaries;
+      // generate reports for duration of project_update
+      ProjectController.getProjectReports( project_update, function( err, project_reports ){
+        
+        // err
+        if ( err ) return err;
 
-          // sort by id
-          $project.target_beneficiaries.sort( function( a, b ) {
-            return a.id.localeCompare( b.id );
-          });
-
-          // target beneficiaries
-          TargetLocation
-            .updateOrCreateEach( { project_id: $project.id }, $target_locations, function( err, target_locations ){
-
-            // return error
-            if (err) return res.json({ err: true, error: err });
-
-            // set
-            $project.target_locations = target_locations;
-
-            // order
-            $project.target_locations.sort(function(a, b) {
-              if ( a.site_type_name ) {
-                if( a.admin3name ) {
-                  return a.admin1name.localeCompare(b.admin1name) ||
-                          a.admin2name.localeCompare(b.admin2name) ||
-                          a.admin3name.localeCompare(b.admin3name) ||
-                          a.site_type_name.localeCompare(b.site_type_name) ||
-                          a.site_name.localeCompare(b.site_name);
-                } else {
-                  return a.admin1name.localeCompare(b.admin1name) ||
-                          a.admin2name.localeCompare(b.admin2name) ||
-                          a.site_type_name.localeCompare(b.site_type_name) ||
-                          a.site_name.localeCompare(b.site_name);
-                }
-              } else {
-                if( a.admin3name ) {
-                  return a.admin1name.localeCompare(b.admin1name) ||
-                          a.admin2name.localeCompare(b.admin2name) ||
-                          a.admin3name.localeCompare(b.admin3name) ||
-                          a.site_name.localeCompare(b.site_name);
-                } else {
-                  return a.admin1name.localeCompare(b.admin1name) ||
-                          a.admin2name.localeCompare(b.admin2name) ||
-                          a.site_name.localeCompare(b.site_name);
-                }
-              }
+        // ASYNC REQUEST 4
+        // async loop project_reports
+        async.each( project_reports, function ( d, next ) {
+          // Report.updateOrCreate( findProject, { project_id: project_update.id, report_month: d.report_month, report_year: d.report_year }, d ).exec(function( err, result ){
+          Report.findOne( { project_id: project_update.id, report_month: d.report_month, report_year: d.report_year } ).then( function ( report ){
+            if( !report ) { report = { id: null } }
+            if ( report ) { d.report_status = report.report_status; d.report_active = report.report_active, d.updatedAt = report.updatedAt }
+            Report.updateOrCreate( findProject, { id: report.id }, d ).exec(function( err, result ){
+              reports.push( ProjectController.set_result( result ) );
+              next();
             });
-            // project user contact details
-            // beside project details related collections updates also report's ones
-            // TODO make it return promise
-            updateUser($project);
-
-            // update submited data fields
-            updateBeneficiaries($project);
-            // return Project
-            return res.json( 200, $project );
-
           });
-
+        }, function ( err ) {
+          if ( err ) return err;
+          target_reports_counter++;
+          returnProject();
         });
 
       });
 
+      // locations
+      var setLocations = function() {
+        
+        // generate locations for each report ( requires report_id )
+        ProjectController.getProjectReportLocations( reports, project_update.target_locations, function( err, locations ){
+          
+          // err
+          if ( err ) return err;
+
+          // ASYNC REQUEST 5
+          // async loop project_update locations
+          async.each( locations, function ( d, next ) {
+            Location.findOne( { project_id: project_update.id, target_location_reference_id: d.target_location_reference_id, report_month: d.report_month, report_year: d.report_year } ).then( function ( location ){
+              if( !location ) { location = { id: null } }
+              // relations set in getProjectReportLocations
+              Location.updateOrCreate( findProject, { id: location.id }, d ).exec(function( err, result ){
+                // no need to return locations
+                next();
+              });
+            });
+          }, function ( err ) {
+            if ( err ) return err;
+            returnProject();
+          });
+
+        });
+      }
+
     });
 
-    var updateUser = function($project){
-      // user object to update tables
-      var updatedRelationsUser = {
-        username: $project.username,
-        name: $project.name,
-        position: $project.position,
-        phone: $project.phone,
-        email: $project.email
-      }
-
-      var findProject = {
-        project_id: $project.id
-      }
-
-      Promise.all([
-        Project.update( { id: $project.id }, updatedRelationsUser ),
-        BudgetProgress.update( findProject, updatedRelationsUser ),
-        TargetBeneficiaries.update( findProject, updatedRelationsUser ),
-        //TargetLocation.update( findProject, updatedRelationsUser ),
-        Report.update( findProject, updatedRelationsUser ),
-        //Location.update( findProject, updatedRelationsUser ),
-        Beneficiaries.update( findProject, updatedRelationsUser ),
-      ])
-        .catch( function(err) {
-          return res.negotiate( err )
-        })
-        .done();
-    };
-
-    var updateBeneficiaries = function($project){
-
-      // add fields here to update
-      var updateBeneficiariesFields = {
-        project_title: $project.project_title, 
-        project_donor: $project.project_donor,
-      }
-
-      var findProject = {
-        project_id: $project.id
-      }
-
-      Promise.all([
-      Beneficiaries.update(findProject, updateBeneficiariesFields),
-      // TargetBeneficiaries.update(findProject, updateBeneficiariesFields)
-        ])
-        .catch( function(err) {
-          return res.negotiate( err )
-        })
-        .done();
-    };
   },
 
   // remvoe budget item
@@ -582,25 +718,28 @@ module.exports = {
 
   // remove target location
   removeLocationById: function( req, res ) {
+    
     // request input
     if ( !req.param( 'id' ) ) {
       return res.json({ err: true, error: 'id required!' });
     }
 
+    // get id
     var id = req.param( 'id' );
 
-    // target location
-    TargetLocation
-      .update( { id: id }, { project_id: null, update_location: true } )
-      .exec( function( err, result ){
+    // promise
+    Promise.all([
+      TargetLocation.destroy( { id: id } ),
+      Location.destroy( { target_location_reference_id: id } )
+    ])
+    .catch( function( err ) {
+      return res.negotiate( err );
+    })
+    .then( function( result ) {
+      // return Project
+      return res.json( 200, { msg: 'Success!' } );
+    });
 
-        // return error
-        if ( err ) return res.json({ err: true, error: err });
-
-        // return Project
-        return res.json( 200, { msg: 'Success!' } );
-
-      });
   },
 
   // delete project
@@ -614,111 +753,70 @@ module.exports = {
     // project id
     var project_id = req.param( 'project_id' );
 
-    // set project by project id
-    Project.destroy( { id: project_id } )
-      .exec( function( err ){
+    // promise
+    Promise.all([
+      Project.destroy( { id: project_id } ),
+      TargetBeneficiaries.destroy( { project_id: project_id } ),
+      TargetLocation.destroy( { project_id: project_id } ),
+      BudgetProgress.destroy( { project_id: project_id } ),
+      Report.destroy( { project_id: project_id } ),
+      Location.destroy( { project_id: project_id } ),
+      Beneficiaries.destroy( { project_id: project_id } ),
+      Trainings.destroy( { project_id: project_id } ),
+      TrainingParticipants.destroy( { project_id: project_id } )
+    ])
+    .catch( function( err ) {
+      return res.negotiate( err );
+    })
+    .then( function( result ) {
+
+      // return
+      return res.json( 200, { msg: 'Project ' + project_id + ' has been deleted!' } );
+
+    });
+  },
+
+  getFinancialDetails: function(req, res){
+    // request input
+    if ( !req.param( 'project_id' ) ) {
+      return res.json( 401, { err: 'project_id required!' } );
+    }
+    // project id
+    var project_id = req.param( 'project_id' );
+
+    // fields
+    var fields = [ 'cluster', 'organization', 'admin0name', 'project_title', 'project_description', 'project_hrp_code', 'project_budget', 'project_budget_currency', 'project_donor_name', 'grant_id', 'activity_type_name','activity_description_name', 'currency_id', 'project_budget_amount_recieved', 'contribution_status', 'project_budget_date_recieved', 'budget_funds_name', 'financial_programming_name', 'multi_year_funding_name', 'funding_2017', 'reported_on_fts_name', 'fts_record_id', 'email', 'createdAt', 'comments' ]
+        fieldNames = [ 'Cluster', 'Organization', 'Country', 'Project Title', 'Project Description', 'HRP Project Code', 'Project Budget', 'Project Budget Currency', 'Project Donor', 'Donor Grant ID', 'Activity Type','Activity Description', 'Currency Recieved', 'Ammount Received', 'Contribution Status', 'Date of Payment', 'Incoming Funds', 'Financial Programming', 'Multi-Year Funding', '2017 Funding', 'Reported on FTS', 'FTS ID', 'Email', 'createdAt', 'Comments' ];
+
+    // get data by project
+
+    BudgetProgress
+      .find()
+      .where( { project_id: project_id } )
+      .exec( function( err, budget ){
 
         // return error
-        if ( err ) return res.json({ err: true, error: err });
+        if (err) return res.negotiate( err );
 
-        // target beneficiaries
-        TargetBeneficiaries.destroy( { project_id: project_id } )
-          .exec( function( err ){
+        // return csv
+        json2csv({ data: budget, fields: fields, fieldNames: fieldNames }, function( err, csv ) {
 
-            // return error
-            if ( err ) return res.json({ err: true, error: err });
+          // error
+          if ( err ) return res.negotiate( err );
 
-            // target locations
-            TargetLocation.destroy( { project_id: project_id } )
-              .exec( function( err ){
-
-              // return error
-              if ( err ) return res.json({ err: true, error: err });
-
-              // budget progress
-              BudgetProgress.destroy( { project_id: project_id } )
-                .exec( function( err ){
-
-                  // return error
-                  if ( err ) return res.json({ err: true, error: err });
-
-                  // location
-                  Report.destroy( { project_id: project_id } )
-                    .exec( function( err ){
-
-                      // return error
-                      if ( err ) return res.json({ err: true, error: err });
-
-                      // location
-                      Location.destroy( { project_id: project_id } )
-                        .exec( function( err ){
-
-                          // return error
-                          if ( err ) return res.json({ err: true, error: err });
-
-                          // beneficiaries
-                          Beneficiaries.destroy( { project_id: project_id } )
-                            .exec( function( err ){
-
-                              // return error
-                              if ( err ) return res.json({ err: true, error: err });
-
-                                // else
-                                return res.json( 200, { msg: 'Project ' + project_id + ' has been deleted!' } );
-
-                              });
-
-                          });
-
-                      });
-
-                  });
-
-              });
+          // success
+          if ( req.params.text ) {
+            res.set('Content-Type', 'text/csv');
+            return res.send( 200, csv );
+          } else {
+            return res.json( 200, { data: csv } );
+          }
 
         });
 
       });
-  },
-
-  getFinancialDetails: function(req, res){
-        // request input
-        if ( !req.param( 'project_id' ) ) {
-          return res.json( 401, { err: 'project_id required!' } );
-        }
-        // project id
-        var project_id = req.param( 'project_id' );
-
-        // fields
-        var fields = [ 'cluster', 'organization', 'admin0name', 'project_title', 'project_description', 'project_hrp_code', 'project_budget', 'project_budget_currency', 'project_donor_name', 'grant_id', 'currency_id', 'project_budget_amount_recieved', 'contribution_status', 'project_budget_date_recieved', 'budget_funds_name', 'financial_programming_name', 'multi_year_funding_name', 'funding_2017', 'reported_on_fts_name', 'fts_record_id', 'email', 'createdAt', 'comments' ]
-            fieldNames = [ 'Cluster', 'Organization', 'Country', 'Project Title', 'Project Description', 'HRP Project Code', 'Project Budget', 'Project Budget Currency', 'Project Donor', 'Donor Grant ID', 'Currency Recieved', 'Ammount Received', 'Contribution Status', 'Date of Payment', 'Incoming Funds', 'Financial Programming', 'Multi-Year Funding', '2017 Funding', 'Reported on FTS', 'FTS ID', 'Email', 'createdAt', 'Comments' ];
-
-        // get data by project
-
-        BudgetProgress
-          .find()
-          .where( { project_id: project_id } )
-          .exec( function( err, budget ){
-
-            // return error
-            if (err) return res.negotiate( err );
-
-            // return csv
-            json2csv({ data: budget, fields: fields, fieldNames: fieldNames }, function( err, csv ) {
-
-              // error
-              if ( err ) return res.negotiate( err );
-
-              // success
-              if ( req.params.text ) {
-                res.set('Content-Type', 'text/csv');
-                return res.send( 200, csv );
-              } else {
-                return res.json( 200, { data: csv } );
-              }
-
-            });
-
-          });
   }
+
 };
+
+module.exports = ProjectController;

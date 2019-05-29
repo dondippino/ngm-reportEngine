@@ -41,10 +41,11 @@ var AdminDashboardController = {
           report_type: req.param( 'report_type' ),
           activity_type_id: req.param( 'activity_type_id' ) === 'all'? {} : { 'activity_type.activity_type_id': req.param( 'activity_type_id' ) },
           organization_tag: req.param( 'organization_tag' ),
-          cluster_filter: req.param( 'cluster_id' ) === 'all' || req.param( 'cluster_id' ) === 'acbar' ? {} : { cluster_id: req.param( 'cluster_id' ) },
+          // cluster_filter: req.param( 'cluster_id' ) === 'all' || req.param( 'cluster_id' ) === 'acbar' ? {} : { cluster_id: req.param( 'cluster_id' ) },
+          cluster_filter: req.param('cluster_id') === 'all' || req.param('cluster_id') === 'acbar' ? {} : { $or: [{ cluster_id: req.param('cluster_id') }, { "activity_type.cluster_id": req.param('cluster_id') }] },
           acbar_partners_filter: req.param( 'cluster_id' ) === 'acbar' ? { project_acbar_partner: true } : {},
-          organization_filter: req.param( 'organization_tag' ) === 'all' ? { organization_tag: { '!': $nin_organizations } } : { organization_tag: req.param( 'organization_tag' ) },
-          organization_filter_Native: req.param( 'organization_tag' ) === 'all' ? { organization_tag: { '$nin': $nin_organizations } } : { organization_tag: req.param( 'organization_tag' ) },
+          organization_filter: req.param( 'organization_tag' ) === 'all' ? { organization_tag: { '!': $nin_organizations } } : { $or: [{ organization_tag: req.param( 'organization_tag' ) }, { "implementing_partners.organization_tag": req.param('organization_tag') }] },
+          organization_filter_Native: req.param( 'organization_tag' ) === 'all' ? { organization_tag: { '$nin': $nin_organizations } } : { $or: [{ organization_tag: req.param( 'organization_tag' ) }, { "implementing_partners.organization_tag": req.param('organization_tag') }] },
           adminRpcode_filter: req.param( 'adminRpcode' ) === 'all' ? {} : { adminRpcode: req.param( 'adminRpcode' ).toUpperCase() },
           admin0pcode_filter: req.param( 'admin0pcode' ) === 'all' ? {} : { admin0pcode: req.param( 'admin0pcode' ).toUpperCase() },
           start_date: req.param( 'start_date' ),
@@ -173,6 +174,33 @@ var AdminDashboardController = {
             });
 
           break;
+
+      case 'warehouses_total':
+
+        StockReport
+          .find( {}, { fields: {_id: 1} } )
+          .where( params.cluster_filter )
+          .where( params.acbar_partners_filter )
+          .where( params.adminRpcode_filter )
+          .where( params.admin0pcode_filter )
+          .where( { report_status: [ 'todo', 'complete' ] } )
+          .where( { reporting_period: { '>=': new Date( params.start_date ), '<=': new Date( params.end_date ) } } )
+          .where( params.organization_filter )
+          .where( { report_active: true } )
+          .exec( function( err, reports ) {
+            if (err) return res.negotiate(err);
+            reports = reports.map( report => report.id);
+            StockLocation
+                .find({ report_id: reports }, { fields: { stock_warehouse_id: 1 } })
+                .exec(function(err, locations) {
+                  if (err) return res.negotiate(err);
+                  locations = _.uniq(locations.map(location => location.stock_warehouse_id));
+                  count = locations.length;
+                  return res.json( 200, { 'value': count });
+                })
+          })
+
+        break;
 
       case 'reports_total':
 
@@ -635,6 +663,390 @@ var AdminDashboardController = {
 
         break;
 
+      case 'reports_saved':
+        
+        // match clause for native mongo query
+        var filterObject = _.extend({}, params.cluster_filter,
+                                      params.acbar_partners_filter,
+                                      params.adminRpcode_filter,
+                                      params.admin0pcode_filter,  
+                                      { report_active: true },
+                                      params.activity_type_id,
+                                      { report_status: 'todo' },
+                                      { reporting_period: 
+                                        { '$gte': new Date(params.moment( params.start_date ).format('YYYY-MM-DD')), 
+                                          '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
+                                        } 
+                                      },
+                                      params.organization_filter_Native 
+                                  );  
+        // reports due
+        Report.native(function(err, collection) {
+          if (err) return res.serverError(err);
+        
+          collection.find(
+            filterObject
+            ).sort({updatedAt:-1 }).toArray(function (err, reports) {
+                 
+              // return error
+              if (err) return res.negotiate( err );
+
+                // counter
+                var counter = 0,
+                    length  = reports.length,
+                    reports_saved = 0;
+
+                // if no reports
+                if ( length === 0 ) {
+
+                  // return empty
+                  return res.json( 200, [] );
+
+                } else {
+
+                  // reports ids
+                  var reports_array = _.map(reports,function(report){return report._id.toString()});
+                  
+                  // find saved
+                  Beneficiaries.native(function(err, collection) {
+                    if (err) return res.serverError(err);
+                  
+                    collection.aggregate([
+                        { 
+                          $match : {report_id:{"$in":reports_array}} 
+                        },
+                        {
+                          $group: {
+                            _id: '$report_id'
+                          }
+                        }
+                      ]).toArray(function (err, results) {
+                          
+                          // err
+                          if (err) return res.negotiate(err);
+
+                          // for reports not submitted with entries
+                          var non_empty_reports=_.map(results,'_id')  
+
+                          // status
+                          reports.forEach( function( d, i ){
+                                
+                            // if benficiaries
+                            if ( non_empty_reports.indexOf(d._id.toString())>-1) {
+                              // add status
+                              reports_saved++;
+                            }
+
+                            // return
+                            counter++;
+                            if ( counter === length ) {
+                              // return indicator
+                              return res.json( 200, { 'value': reports_saved });
+                            }
+
+                          });
+
+                      });
+                  
+                  });
+                }
+
+            });
+        });
+
+        break;
+
+      case 'reports_submitted':
+
+        // reports complete
+        var filterObject = _.extend({}, params.cluster_filter,
+                                        params.acbar_partners_filter,
+                                        params.adminRpcode_filter,
+                                        params.admin0pcode_filter,  
+                                        { report_active: true },
+                                        params.activity_type_id,
+                                        { report_status: 'complete' },
+                                        { reporting_period: 
+                                          { '$gte': new Date(params.moment( params.start_date ).format('YYYY-MM-DD')), 
+                                            '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
+                                          } 
+                                        },
+                                        params.organization_filter_Native 
+                                      );
+
+        Report.native(function(err, collection) {
+          if (err) return res.serverError(err);
+        
+          collection.find(
+            filterObject
+            ).sort({updatedAt:-1 }).toArray(function (err, reports) {
+              
+              // return error
+              if (err) return res.negotiate( err );
+
+              // return
+              if ( params.list ) {
+
+                // counter
+                var counter= 0,
+                    length = reports.length;
+
+                // if no reports
+                if ( length === 0 ) {
+
+                  // return empty
+                  return res.json( 200, [] );
+
+                } else {
+
+                  var reports_array = _.map(reports,function(report){return report._id.toString()});
+
+                  Beneficiaries.native(function(err, collection) {
+                    if (err) return res.serverError(err);
+                  
+                    collection.aggregate([
+                        { 
+                          $match : {report_id:{"$in":reports_array}} 
+                        },
+                        {
+                          $group: {
+                            _id: '$report_id'
+                          }
+                        }
+                      ]).toArray(function (err, results) {
+                                    if (err) return res.serverError(err);
+
+                                    // for reports not submitted with entries
+                                    var non_empty_reports=_.map(results,'_id')    
+                                    
+                                    TrainingParticipants.native(function(err, collection) {
+                                      if (err) return res.serverError(err);
+                                    
+                                      collection.aggregate([
+                                          { 
+                                            $match : {report_id:{"$in":reports_array}} 
+                                          },
+                                          {
+                                            $group: {
+                                              _id: '$report_id'
+                                            }
+                                          }
+                                        ]).toArray(function (err, results) {
+
+                                                  if (err) return res.serverError(err);
+                                                  var non_empty_train_reports=_.map(results,'_id')
+
+                                                  // reports
+                                                  reports.forEach( function( d, i ){
+
+                                                        // add status
+                                                        reports[i].id           = reports[i]._id.toString();
+                                                        reports[i].status       = '#4db6ac'
+                                                        reports[i].status_title = 'Complete';
+																												reports[i].icon         = 'check_circle';
+																												if (reports[i].report_validation && reports[i].report_validation === 'valid') {
+																													reports[i].icon = 'done_all';
+																													reports[i].status = '#4db6ac';
+																												}
+																												if (reports[i].report_validation && reports[i].report_validation === 'invalid') {
+																													reports[i].icon = 'not_interested';
+																													reports[i].status = '#f44336';
+																												}
+																												if (reports[i].report_validation && reports[i].report_validation === 'checked') {
+																													reports[i].icon = 'watch_later';
+																													reports[i].status = '#4db6ac';
+																												}
+                                                        reports[i].report_month_format = moment( reports[i].report_month+1, 'MM' ).format('MMMM');
+                                                        reports[i].report_link = params.url + '#/cluster/projects/report/' + reports[i].project_id + '/' + reports[i]._id.toString();
+
+                                                        // if benficiaries
+                                                        if ( non_empty_reports.indexOf(d._id.toString())<0&&non_empty_train_reports.indexOf(d._id.toString())<0  ) {
+                                                                  // add status                   
+                                                                  reports[i].status       = '#80cbc4';
+                                                                  reports[i].icon         = 'adjust';
+                                                                  reports[i].status_title = 'Empty Submission';
+                                                                }
+
+                                                                // set implementing partners icon
+                                                                if (req.param('organization_tag') !== 'all' && d.implementing_partners && d.implementing_partners.length) {
+                                                                  if (d.implementing_partners.filter(o => o.organization_tag === req.param('organization_tag')).length) {
+                                                                    reports[i].icon = 'group';
+                                                                    reports[i].status = '#2196F3';
+                                                                    reports[i].status_title = 'Complete';
+                                                                  }
+                                                                }
+                                                                // return
+                                                                counter++;
+                                                                if ( counter === length ) {
+
+                                                                  // !csv
+                                                                  if ( !params.csv ) {
+                                                                    // table
+                                                                    return res.json( 200, reports );
+                                                                  }
+
+                                                                  // csv
+                                                                  if ( params.csv ) {
+
+                                                                    // return csv
+                                                                    json2csv({ data: reports, fields: fields, fieldNames: fieldNames  }, function( err, csv ) {
+
+                                                                      // error
+                                                                      if ( err ) return res.negotiate( err );
+
+                                                                      // success
+                                                                      return res.json( 200, { data: csv } );
+
+                                                                    });
+                                                                  }
+                                                                }
+                                                    });
+                                              });
+                                    });
+                      });
+                  });
+                }
+
+              } else {
+                  // return indicator
+                  return res.json( 200, { 'value': reports.length });
+              }
+            });
+          });
+
+        break;
+
+      case 'reports_due':
+
+        // match clause for native mongo query
+        var filterObject = _.extend({},	params.cluster_filter,
+                                      params.acbar_partners_filter,
+                                      params.adminRpcode_filter,
+                                      params.admin0pcode_filter,  
+                                      { report_active: true },
+                                      params.activity_type_id,
+                                      { report_status: 'todo' },
+                                      { reporting_period: 
+                                        { '$gte': new Date(params.moment( params.start_date ).format('YYYY-MM-DD')), 
+                                          '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
+                                        } 
+                                      },
+                                      params.organization_filter_Native 
+                                  );  
+        // reports due
+        Report.native(function(err, collection) {
+          if (err) return res.serverError(err);
+        
+          collection.find(
+            filterObject
+            ).sort({updatedAt:-1 }).toArray(function (err, reports) {
+                 
+              // return error
+              if (err) return res.negotiate( err );
+
+              // counter
+              var counter = 0,
+                  length  = reports.length;
+
+              // if no reports
+              if ( length === 0 ) {
+
+                // return empty
+                return res.json( 200, [] );
+
+              } else {
+
+                // reports ids
+                var reports_array = _.map(reports,function(report){return report._id.toString()});
+                
+                Beneficiaries.native(function(err, collection) {
+                  if (err) return res.serverError(err);
+                
+                  collection.aggregate([
+                      { 
+                        $match : {report_id:{"$in":reports_array}} 
+                      },
+                      {
+                        $group: {
+                          _id: '$report_id'
+                        }
+                      }
+                    ]).toArray(function (err, results) {
+                        if (err) return res.negotiate(err);
+
+                        // for reports not submitted with entries
+                        var non_empty_reports=_.map(results,'_id')	
+
+                        // status
+                        reports.forEach( function( d, i ){
+
+                              // add status
+                              reports[i].id     = reports[i]._id.toString();
+                              reports[i].status = '#e57373'
+                              reports[i].status_title = 'Due';
+                              reports[i].icon = 'error';
+                              reports[i].report_month_format = moment( reports[i].report_month+1, 'MM' ).format('MMMM');
+                              reports[i].report_link = params.url + '#/cluster/projects/report/' + reports[i].project_id + '/' + reports[i]._id.toString();
+                              // if benficiaries
+                              if ( non_empty_reports.indexOf(d._id.toString())>-1) {
+                                // add status
+                                reports[i].icon = 'watch_later';
+                                reports[i].status = '#fff176';
+                                reports[i].status_title = 'Pending';
+                              }
+
+                              // set implementing partners icon
+                              if (req.param('organization_tag') !== 'all' && d.implementing_partners && d.implementing_partners.length) {
+                                if (d.implementing_partners.filter(o => o.organization_tag === req.param('organization_tag')).length) {
+                                  reports[i].icon = 'group';
+                                  reports[i].status = '#2196F3';
+                                  reports[i].status_title = 'Pending';
+                                }
+                              }
+                              // return
+                              counter++;
+                              if ( counter === length ) {
+
+                                // value
+                                if ( !params.list ) {
+                                  // return indicator
+                                  return res.json( 200, { 'value': reports.length - non_empty_reports.length });
+                                }
+
+                                // !csv
+                                if ( !params.csv ) {
+                                  // table
+                                  return res.json( 200, reports );
+                                }
+
+                                // csv
+                                if ( params.csv ) {
+
+                                  // return csv
+                                  json2csv({ data: reports, fields: fields, fieldNames: fieldNames  }, function( err, csv ) {
+
+                                    // error
+                                    if ( err ) return res.negotiate( err );
+
+                                    // success
+                                    return res.json( 200, { data: csv } );
+
+                                  });
+                                }
+
+                              }
+
+                          });
+
+                       });
+                });
+              }
+
+            });
+        });
+
+        break;
+
       case 'reports_total':
 
         // reports total
@@ -704,272 +1116,7 @@ var AdminDashboardController = {
 
         break;
 
-      case 'reports_due':
-        // match clause for native mongo query
-      var filterObject = _.extend({},	params.cluster_filter,
-                                      params.acbar_partners_filter,
-                                      params.adminRpcode_filter,
-                                      params.admin0pcode_filter,  
-                                      { report_active: true },
-                                      params.activity_type_id,
-                                      { report_status: 'todo' },
-                                      { reporting_period: 
-                                        { '$gte': new Date(params.moment( params.start_date ).format('YYYY-MM-DD')), 
-                                          '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
-                                        } 
-                                      },
-                                      params.organization_filter_Native 
-                                  );  
-        // reports due
-        Report.native(function(err, collection) {
-          if (err) return res.serverError(err);
-        
-          collection.find(
-            filterObject
-            ).sort({updatedAt:-1 }).toArray(function (err, reports) {
-                 
-              // return error
-              if (err) return res.negotiate( err );
-
-              // return
-              if ( params.list ) {
-
-                // counter
-                var counter = 0,
-                    length  = reports.length;
-
-                // if no reports
-                if ( length === 0 ) {
-
-                  // return empty
-                  return res.json( 200, [] );
-
-                } else {
-
-                  // reports ids
-                  var reports_array = _.map(reports,function(report){return report._id.toString()});
-                  
-                  Beneficiaries.native(function(err, collection) {
-                    if (err) return res.serverError(err);
-                  
-                    collection.aggregate([
-                        { 
-                          $match : {report_id:{"$in":reports_array}} 
-                        },
-                        {
-                          $group: {
-                            _id: '$report_id'
-                          }
-                        }
-                      ]).toArray(function (err, results) {
-                          if (err) return res.negotiate(err);
-
-                          // for reports not submitted with entries
-                          var non_empty_reports=_.map(results,'_id')	
-
-                          // status
-                          reports.forEach( function( d, i ){
-
-                                // add status
-                                reports[i].id     = reports[i]._id.toString();
-                                reports[i].status = '#e57373'
-                                reports[i].status_title = 'Due';
-                                reports[i].icon = 'watch_later';
-                                reports[i].report_month_format = moment( reports[i].report_month+1, 'MM' ).format('MMMM');
-                                reports[i].report_link = params.url + '#/cluster/projects/report/' + reports[i].project_id + '/' + reports[i]._id.toString();
-                                // if benficiaries
-                                if ( non_empty_reports.indexOf(d._id.toString())>-1) {
-                                  // add status
-                                  reports[i].status = '#fff176';
-                                  reports[i].status_title = 'Pending';
-                                }
-
-                                // return
-                                counter++;
-                                if ( counter === length ) {
-
-                                  // !csv
-                                  if ( !params.csv ) {
-                                    // table
-                                    return res.json( 200, reports );
-                                  }
-
-                                  // csv
-                                  if ( params.csv ) {
-
-                                    // return csv
-                                    json2csv({ data: reports, fields: fields, fieldNames: fieldNames  }, function( err, csv ) {
-
-                                      // error
-                                      if ( err ) return res.negotiate( err );
-
-                                      // success
-                                      return res.json( 200, { data: csv } );
-
-                                    });
-                                  }
-
-                                }
-
-                            });
-
-                         });
-                });
-                }
-
-              } else {
-
-                // return indicator
-                return res.json( 200, { 'value': reports.length });
-              }
-
-
-            });
-        });
-
-        break;
-
-      case 'reports_complete':
-
-        // reports complete
-        var filterObject = _.extend({},	params.cluster_filter,
-                                        params.acbar_partners_filter,
-                                        params.adminRpcode_filter,
-                                        params.admin0pcode_filter,  
-                                        { report_active: true },
-                                        params.activity_type_id,
-                                        { report_status: 'complete' },
-                                        { reporting_period: 
-                                          { '$gte': new Date(params.moment( params.start_date ).format('YYYY-MM-DD')), 
-                                            '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
-                                          } 
-                                        },
-                                        params.organization_filter_Native 
-                                      );
-
-        Report.native(function(err, collection) {
-          if (err) return res.serverError(err);
-        
-          collection.find(
-            filterObject
-            ).sort({updatedAt:-1 }).toArray(function (err, reports) {
-              
-              // return error
-              if (err) return res.negotiate( err );
-
-              // return
-              if ( params.list ) {
-
-                // counter
-                var counter= 0,
-                    length = reports.length;
-
-                // if no reports
-                if ( length === 0 ) {
-
-                  // return empty
-                  return res.json( 200, [] );
-
-                } else {
-
-                  var reports_array = _.map(reports,function(report){return report._id.toString()});
-
-                  Beneficiaries.native(function(err, collection) {
-                    if (err) return res.serverError(err);
-                  
-                    collection.aggregate([
-                        { 
-                          $match : {report_id:{"$in":reports_array}} 
-                        },
-                        {
-                          $group: {
-                            _id: '$report_id'
-                          }
-                        }
-                      ]).toArray(function (err, results) {
-                                    if (err) return res.serverError(err);
-
-                                    // for reports not submitted with entries
-                                    var non_empty_reports=_.map(results,'_id')		
-                                    
-                                    TrainingParticipants.native(function(err, collection) {
-                                      if (err) return res.serverError(err);
-                                    
-                                      collection.aggregate([
-                                          { 
-                                            $match : {report_id:{"$in":reports_array}} 
-                                          },
-                                          {
-                                            $group: {
-                                              _id: '$report_id'
-                                            }
-                                          }
-                                        ]).toArray(function (err, results) {
-
-                                                  if (err) return res.serverError(err);
-                                                  var non_empty_train_reports=_.map(results,'_id')
-
-                                                  // reports
-                                                  reports.forEach( function( d, i ){
-
-                                                        // add status
-                                                        reports[i].id           = reports[i]._id.toString();
-                                                        reports[i].status       = '#4db6ac'
-                                                        reports[i].status_title = 'Complete';
-                                                        reports[i].icon         = 'check_circle';
-                                                        reports[i].report_month_format = moment( reports[i].report_month+1, 'MM' ).format('MMMM');
-                                                        reports[i].report_link = params.url + '#/cluster/projects/report/' + reports[i].project_id + '/' + reports[i]._id.toString();
-
-                                                        // if benficiaries
-                                                        if ( non_empty_reports.indexOf(d._id.toString())<0&&non_empty_train_reports.indexOf(d._id.toString())<0  ) {
-                                                                  // add status                   
-                                                                  reports[i].status       = '#80cbc4';
-                                                                  reports[i].icon         = 'adjust';
-                                                                  reports[i].status_title = 'Empty Submission';
-                                                                }
-
-
-                                                                // return
-                                                                counter++;
-                                                                if ( counter === length ) {
-
-                                                                  // !csv
-                                                                  if ( !params.csv ) {
-                                                                    // table
-                                                                    return res.json( 200, reports );
-                                                                  }
-
-                                                                  // csv
-                                                                  if ( params.csv ) {
-
-                                                                    // return csv
-                                                                    json2csv({ data: reports, fields: fields, fieldNames: fieldNames  }, function( err, csv ) {
-
-                                                                      // error
-                                                                      if ( err ) return res.negotiate( err );
-
-                                                                      // success
-                                                                      return res.json( 200, { data: csv } );
-
-                                                                    });
-                                                                  }
-                                                                }
-                                                    });
-                                              });
-                                    });
-                      });
-                  });
-                }
-
-              } else {
-                  // return indicator
-                  return res.json( 200, { 'value': reports.length });
-              }
-            });
-          });
-
-        break;
-
+     
       case 'reports_complete_total':
 
         // reports total
@@ -1082,8 +1229,10 @@ var AdminDashboardController = {
 						// 	: (req.param('cluster_id') !== 'cvwg')
 						// 		? { $or: [{ cluster_id: req.param('cluster_id') }, { mpc_purpose_cluster_id: { $regex: req.param('cluster_id') } }] }
 						// 		: { $or: [{ cluster_id: req.param('cluster_id') }, { mpc_purpose_cluster_id: { $regex: req.param('cluster_id') } }, { activity_description_id: { $regex: 'cash' } }] },
-						cluster_id_Native: (req.param('cluster_id') === 'all' ) ? {} : { cluster_id: req.param('cluster_id') },
-						organization_tag_Native: req.param('organization_tag') === 'all' ? { organization_tag: { $nin: $nin_organizations } } : { organization_tag: req.param('organization_tag') },
+						// cluster_id_Native: (req.param('cluster_id') === 'all' ) ? {} : { cluster_id: req.param('cluster_id') },
+						cluster_id_Native: (req.param('cluster_id') === 'all' ) ? {} : { $or: [{ cluster_id: req.param('cluster_id') }, { "activity_type.cluster_id": req.param('cluster_id') }] },
+						// organization_tag_Native: req.param('organization_tag') === 'all' ? { organization_tag: { $nin: $nin_organizations } } : { organization_tag: req.param('organization_tag') },
+						organization_tag_Native: req.param('organization_tag') === 'all' ? { organization_tag: { $nin: $nin_organizations } } : { $or: [{ organization_tag: req.param('organization_tag') }, { "implementing_partners.organization_tag": req.param('organization_tag') }] },
 						project_startDateNative: { project_start_date: { $lte: new Date(req.param('end_date')) }},
 						project_endDateNative: { project_end_date: { $gte: new Date(req.param('start_date')) }},
 						default_native: { project_id: { $ne: null }},
@@ -1114,7 +1263,8 @@ var AdminDashboardController = {
 								cluster: { $first: '$cluster' },
 								organization_tag: { $first:'$organization_tag'},
 								organization_id: { $first: '$organization_id' },
-								organization: { $first: '$organization' },								
+								organization: { $first: '$organization' },
+								implementing_partners: { $first: '$implementing_partners'},								
 								target_total:{ $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } }								
 							}
 						}
@@ -1168,7 +1318,9 @@ var AdminDashboardController = {
 										}
 										el.report_total_format = nFormatter(el.report_total);
 									}
-																	
+                  if (el.implementing_partners && Array.isArray(el.implementing_partners)) {
+                    el.implementing_partners = el.implementing_partners.map(x => x.organization ? x.organization : x.organization_tag).join(", ");
+                  }						
 								});													
 								return res.json(200, target_beneficiaries);
 							})

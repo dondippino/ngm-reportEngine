@@ -45,7 +45,7 @@ module.exports = {
 			required: true
 		},
 		implementing_partners: {
-			type: 'string'
+			type: 'array'
 		},
 		cluster_id: {
 			type: 'string',
@@ -142,15 +142,39 @@ module.exports = {
 			type: 'array'
 		},
 
-		// SOs
+		// SOs ( afg only )
 		strategic_objectives: {
 			type: 'array'
+		},
+
+		// SOs ( new implementation )
+		strategic_objective_id:{
+			type: 'string'
+		},
+		strategic_objective_name:{
+			type: 'string'
+		},
+		strategic_objective_description:{
+			type: 'string'
+		},
+		sector_objective_id:{
+			type:'string'
+		},
+		sector_objective_name:{
+			type:'string'
+		},
+		sector_objective_description:{
+			type:'string'
+		},
+		strategic_objective_descriptions: {
+			type: 'json'
 		},
 
 		// category
 		category_type_id: {
 			type: 'string'
 		},
+
 		category_type_name: {
 			type: 'string'
 		},
@@ -163,6 +187,19 @@ module.exports = {
 		beneficiary_type_name: {
 			type: 'string',
 			required: true
+		},
+
+
+		// beneficiary category
+
+		beneficiary_category_id: {
+			type: 'string'
+		},
+
+		beneficiary_category_name: {
+			type: 'string'
+
+			
 		},
 
 		// activity_type
@@ -321,18 +358,6 @@ module.exports = {
       type: 'string'
     },
 
-		// target locations
-		admin1pcode: {
-			type: 'array'
-		},
-		admin2pcode: {
-			type: 'array'
-		},
-		admin3pcode: {
-			type: 'array'
-		},
-
-
 
 
 		/*********** 2017 *************/
@@ -391,47 +416,18 @@ module.exports = {
 
   // updateOrCreate
     // http://stackoverflow.com/questions/25936910/sails-js-model-insert-or-update-records
-  updateOrCreateEach: function( parent, values, cb ){
+  updateOrCreate: function( parent, criteria, values ){
     var self = this; // reference for use by callbacks
-    // If no values were specified, return []
-    if (!values.length) cb( false, [] );
 
-    var results = [],
-        counter = 0,
-        length = values.length;
-
-    // values
-    values.forEach(function( value ){
-
-      if( value.id ){
-        self.update({ id: value.id }, value, function( err, update ){
-          if(err) return cb(err, false);
-          results.push( update[0] );
-
-          counter++;
-          if( counter===length ){
-            cb( false, results );
-          }
-        });
-      }else{
-  			// set based on criteria
-  			for ( key in parent ){
-  				value[ key ] = parent[ key ];
-  			}
-        self.create(value, function( err, create ){
-          if(err) return cb(err, false);
-          results.push( create );
-
-          counter++;
-          if( counter===length ){
-            cb( false, results );
-          }
-        });
-      }
-
-    });
+    // if exists
+    if( criteria.id ){
+      return self.update( criteria, values );
+    }else{
+			// set relation
+			for ( key in parent ){ values[ key ] = parent[ key ]; }
+      return self.create( values );
+    }    
 
   }
 
 };
-
