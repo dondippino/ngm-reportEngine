@@ -45,7 +45,7 @@ module.exports = {
 			required: true
 		},
 		implementing_partners: {
-			type: 'string'
+			type: 'array'
 		},
 		cluster_id: {
 			type: 'string',
@@ -144,28 +144,9 @@ module.exports = {
 		activity_description: {
 			type: 'array'
 		},
-
+		
 		// SOs
 		strategic_objectives: {
-			type: 'array'
-		},
-
-		// target beneficiaries
-		category_type: {
-			type: 'array'
-		},
-		beneficiary_type: {
-			type: 'array'
-		},
-
-		// target locations
-		admin1pcode: {
-			type: 'array'
-		},
-		admin2pcode: {
-			type: 'array'
-		},
-		admin3pcode: {
 			type: 'array'
 		},
 
@@ -197,12 +178,23 @@ module.exports = {
 			type: 'date',
 			required: true
 		},
-
+		report_validation:{
+			type: 'string',
+		},
     // add reference to Locations
     // locations: {
     //   collection: 'location',
     //   via: 'report_id'
     // },
+
+    // location groups
+		location_groups_check: {
+			type: 'boolean'
+		},
+
+		location_groups: {
+			type: 'array'
+		},    
 
     notes: {
     	type: 'string'
@@ -222,29 +214,17 @@ module.exports = {
 
   // updateOrCreate
     // http://stackoverflow.com/questions/25936910/sails-js-model-insert-or-update-records
-  updateOrCreate: function( values, criteria, cb ){
+  updateOrCreate: function( parent, criteria, values ){
     var self = this; // reference for use by callbacks
-    // If no values were specified, return []
-    if (!values) cb( false, [] );
 
-    // find
-    this.findOne( criteria, function ( err, result ){
-      if(err) return cb(err, false);
-
-      // update or create
-      if( result ){
-      	// keep complete reports complete
-      	if ( result.report_status === 'complete' ){
-      		values.report_status = result.report_status;
-      	}
-	      self.update( criteria, values, function( err, update ){
-					if(err) return cb(err, false);
-					cb( false, update[0] );
-	      });
-	    }else{
-	      self.create( values, cb );
-	    }
-    });
+    // if exists
+    if( criteria.id ){
+      return self.update( criteria, values );
+    }else{
+			// set relation
+			for ( key in parent ){ values[ key ] = parent[ key ]; }
+      return self.create( values );
+    }
 
   }
 

@@ -116,6 +116,9 @@ module.exports = {
 		funding_2017: {
 			type: 'float',
 		},
+		funding_year: {
+			type: 'integer',
+		},
 		reported_on_fts_id: {
 			type: 'string'
 		},
@@ -181,37 +184,6 @@ module.exports = {
 		inter_cluster_activities: {
 			type: 'array'
 		},
-		activity_type: {
-			type: 'array',
-			required: true
-		},
-		activity_description: {
-			type: 'array'
-		},
-
-		// SOs
-		strategic_objectives: {
-			type: 'array'
-		},
-
-		// target beneficiaries
-		category_type: {
-			type: 'array'
-		},
-		beneficiary_type: {
-			type: 'array'
-		},
-
-		// target locations
-		admin1pcode: {
-			type: 'array'
-		},
-		admin2pcode: {
-			type: 'array'
-		},
-		admin3pcode: {
-			type: 'array'
-		},
 
 		// budget item
 		project_donor_id: {
@@ -225,6 +197,13 @@ module.exports = {
 			type: 'string'
 		},
 		activity_type_name: {
+			type: 'string'
+		},
+
+		activity_description_id:{
+			type: 'string'
+		},
+		activity_description_name:{
 			type: 'string'
 		},
 		project_budget_currency: {
@@ -264,47 +243,19 @@ module.exports = {
 
   // updateOrCreate
     // http://stackoverflow.com/questions/25936910/sails-js-model-insert-or-update-records
-  updateOrCreateEach: function( parent, values, cb ){
+  updateOrCreate: function( parent, criteria, values ){
     var self = this; // reference for use by callbacks
-    // If no values were specified, return []
-    if (!values.length) cb( false, [] );
 
-    var results = [],
-        counter = 0,
-        length = values.length;
-
-    // values
-    values.forEach(function( value ){
-
-      if( value.id ){
-        self.update({ id: value.id }, value, function( err, update ){
-          if(err) return cb(err, false);
-          results.push( update[0] );
-
-          counter++;
-          if( counter===length ){
-            cb( false, results );
-          }
-        });
-      }else{
-  			// set based on criteria
-  			for ( key in parent ){
-  				value[ key ] = parent[ key ];
-  			}
-        self.create(value, function( err, create ){
-          if(err) return cb(err, false);
-          results.push( create );
-
-          counter++;
-          if( counter===length ){
-            cb( false, results );
-          }
-        });
-      }
-
-    });
+    // if exists
+    if( criteria.id ){
+      return self.update( criteria, values );
+    }else{
+			// set relation
+			for ( key in parent ){ values[ key ] = parent[ key ]; }
+      return self.create( values );
+    }    
 
   }
-
+  
 };
 

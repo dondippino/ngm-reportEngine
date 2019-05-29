@@ -286,8 +286,7 @@ var UserController = {
                 Project.update( findOriginalUser, updatedRelationsUser ),
                 BudgetProgress.update( findOriginalUser, updatedRelationsUser ),
                 TargetBeneficiaries.update( findOriginalUser, updatedRelationsUser ),
-                // TargetLocation fails due to update triggers
-                // TargetLocation.update( findOriginalUser, updatedRelationsUser ),
+                TargetLocation.update( findOriginalUser, updatedRelationsUser ),
                 Report.update( findOriginalUser, updatedRelationsUser ),
                 Location.update( findOriginalUser, updatedRelationsUser ),
                 Beneficiaries.update( findOriginalUser, updatedRelationsUser ),
@@ -330,8 +329,6 @@ var UserController = {
 
   // update the profile details 
   updateProfileDetails: function( req, res, originalUser, updatedUser ){
-
-    console.log('in updateProfileDetails')
 
     // if country changes, make updates and add new history
     if ( originalUser.admin0pcode !== updatedUser.admin0pcode ) {

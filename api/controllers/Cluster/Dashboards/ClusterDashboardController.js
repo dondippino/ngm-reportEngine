@@ -9,6 +9,7 @@
 var moment = require( 'moment' );
 var json2csv = require( 'json2csv' );
 var $nin_organizations = [ 'immap', 'arcs' ];
+var async = require('async');
 
 var ClusterDashboardController = {
 
@@ -47,6 +48,7 @@ var ClusterDashboardController = {
 			list: req.param('list') ? req.param('list') : false,
 			indicator: req.param('indicator'),
 			cluster_id: req.param('cluster_id'),
+			cluster_ids: req.param('cluster_ids') ? req.param('cluster_ids') : [req.param('cluster_id')],
 			activity_type_id: req.param( 'activity_type_id' ) ? req.param( 'activity_type_id' ) : 'all',
 			adminRpcode: req.param('adminRpcode'),
 			admin0pcode: req.param('admin0pcode'),
@@ -90,8 +92,27 @@ var ClusterDashboardController = {
 								: ( params.cluster_id !== 'cvwg' )
 									? { $or: [{ cluster_id: params.cluster_id }, { mpc_purpose_cluster_id: { $regex : params.cluster_id } } ] } 
 									: { $or: [{ cluster_id: params.cluster_id }, { mpc_purpose_cluster_id: { $regex : params.cluster_id } }, { activity_description_id: { $regex: 'cash' } }, { mpc_delivery_type_id: { $in: ['cash', 'voucher'] } } ] },
+			cluster_ids_Native: ( params.cluster_ids.includes('all') || params.cluster_ids.includes('rnr_chapter') || params.cluster_ids.includes('acbar') ) 
+								? {} 
+								: ( params.cluster_ids.includes('cvwg') )
+									? { $or: [{ cluster_id: { $in: params.cluster_ids } }, { "mpc_purpose.cluster_id" : { $in : params.cluster_ids }}, { activity_description_id: { $regex: 'cash' } }, { mpc_delivery_type_id: { $in: ['cash', 'voucher'] } } ] }
+									: { $or: [{ cluster_id: { $in: params.cluster_ids } }, { "mpc_purpose.cluster_id" : { $in : params.cluster_ids }} ] },
+			is_cluster_ids_array: params.cluster_ids ? true : false,
 			organization_tag_Native: params.organization_tag === 'all' ? { organization_tag: { $nin: $nin_organizations } } : { organization_tag: params.organization_tag },
 			date_Native: { reporting_period: { $gte: new Date( params.start_date ), $lte: new Date( params.end_date )} },
+			delivery_type_id: function() {
+				var filter = {}
+				if ( params.indicator === 'households_population' ) {
+					filter = { delivery_type_id: 'population' }
+				}
+				if ( params.indicator === 'beneficiaries_population' ) {
+					filter = { delivery_type_id: 'population' }
+				}
+				if ( params.indicator === 'beneficiaries_service' ) {
+					filter = { delivery_type_id: 'service' }
+				}
+				return filter
+			}
 
 		}
 	},
@@ -108,12 +129,13 @@ var ClusterDashboardController = {
 										filters.admin0pcode_Native,
 										filters.admin1pcode_Native,
 										filters.admin2pcode_Native,
-										filters.cluster_id_Native,
+										filters.is_cluster_ids_array ? filters.cluster_ids_Native : filters.cluster_id_Native,
 										filters.activity_type_id,
 										filters.acbar_partners,
 										filters.organization_tag_Native,
 										filters.beneficiaries,
-										filters.date_Native )
+										filters.date_Native,
+										filters.delivery_type_id() )
 
 		// switch on indicator
 		switch( params.indicator ) {
@@ -617,6 +639,68 @@ var ClusterDashboardController = {
 
 				break;
 
+			case 'households_population':
+				
+				// total sum
+				Beneficiaries.native(function(err, collection) {
+					if (err) return res.serverError(err);
+				
+					collection.aggregate(
+						[
+							{ 
+								$match : filterObject 
+							},
+							{
+								$group:
+								{
+									_id: null,
+									total:  { $sum: { $add: [ "$households" ] } } ,
+								}
+							}
+						]
+					).toArray(function (err, beneficiaries) {
+						if (err) return res.serverError(err);
+
+						var total = beneficiaries[0]?beneficiaries[0].total:0;
+
+						return res.json( 200, { 'value': total } );
+					});
+				});
+				
+				break;
+
+			
+			case 'beneficiaries_population':
+
+				// total sum
+				Beneficiaries.native(function(err, collection) {
+					if (err) return res.serverError(err);
+				
+					collection.aggregate(
+						[
+							{ 
+								$match : filterObject 
+							},
+							{
+								$group:
+								{
+									_id: null,
+									total:  { $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } }
+								}
+							}
+						]
+					).toArray(function (err, beneficiaries) {
+						if (err) return res.serverError(err);
+
+						var total = beneficiaries[0]?beneficiaries[0].total:0;
+
+						return res.json( 200, { 'value': total } );
+					});
+				});
+				
+				break;
+				
+
 
 			// raw data export
 			case 'beneficiaries':
@@ -675,240 +759,279 @@ var ClusterDashboardController = {
 						collection.find(filterObject).toArray(function (err, beneficiaries) {
 							if (err) return res.serverError(err);
 							
-							var total = 0;
+							var fields = [
+								'project_id',
+								'report_id',
+								'cluster_id',
+								'cluster',
+								'mpc_purpose_cluster_id',
+								'mpc_purpose_type_name',
+								'organization',
+								'implementing_partners',
+								'project_hrp_code',
+								'project_code',
+								'project_title',
+								'project_start_date',
+								'project_end_date',
+								'donor',
+								'report_month_number',
+								'report_month',
+								'report_year',
+								'reporting_period',
+								'admin0pcode',
+								'admin0name',
+								'admin1pcode',
+								'admin1name',
+								'admin2pcode',
+								'admin2name',
+								'admin3pcode',
+								'admin3name',
+								'admin4pcode',
+								'admin4name',
+								'admin5pcode',
+								'admin5name',
+								'conflict',
+								'site_id',
+								'site_class',
+								'site_status',
+								'site_hub_id',
+								'site_hub_name',
+								'site_implementation_name',
+								'site_type_name',
+								'site_name',
+								'category_type_id',
+								'category_type_name',
+								'beneficiary_type_id',
+								'beneficiary_type_name',
+								'beneficiary_category_name',
+								'strategic_objective_id',
+								'strategic_objective_name',
+								'strategic_objective_description',
+								'sector_objective_id',
+								'sector_objective_name',
+								'sector_objective_description',
+								'activity_type_id',
+								'activity_type_name',
+								'activity_description_id',
+								'activity_description_name',
+								'activity_detail_id',
+								'activity_detail_name',
+								'indicator_id',
+								'indicator_name',
+								'activity_status_id',
+								'activity_status_name',
+								'delivery_type_id',
+								'delivery_type_name',
+								'distribution_status',
+								'distribution_start_date',
+								'distribution_end_date',
+								'partial_kits',
+								'kit_details',
+								'units',
+								'unit_type_id',
+								'unit_type_name',
+								'transfer_type_value',
+								'mpc_delivery_type_id',
+								'mpc_delivery_type_name',
+								'mpc_mechanism_type_id',
+								'mpc_mechanism_type_name',
+								'package_type_id',
+								'households',
+								'families',
+								'boys',
+								'girls',
+								'men',
+								'women',
+								'elderly_men',
+								'elderly_women',
+								'total',
+								'admin1lng',
+								'admin1lat',
+								'admin2lng',
+								'admin2lat',
+								'admin3lng',
+								'admin3lat',
+								'admin4lng',
+								'admin4lat',
+								'admin5lng',
+								'admin5lat',
+								'site_lng',
+								'site_lat',
+								'updatedAt',
+								'createdAt',
+							],
 
-							// format
-							beneficiaries.forEach(function( d, i ){
+						fieldNames = [
+								'project_id',
+								'report_id',
+								'cluster_id',
+								'cluster',
+								'mpc_purpose_cluster_id',
+								'mpc_purpose_type_name',
+								'organization',
+								'implementing_partners',
+								'project_hrp_code',
+								'project_code',
+								'project_title',
+								'project_start_date',
+								'project_end_date',
+								'donor',
+								'report_month_number',
+								'report_month',
+								'report_year',
+								'reporting_period',
+								'admin0pcode',
+								'admin0name',
+								'admin1pcode',
+								'admin1name',
+								'admin2pcode',
+								'admin2name',
+								'admin3pcode',
+								'admin3name',
+								'admin4pcode',
+								'admin4name',
+								'admin5pcode',
+								'admin5name',
+								'conflict',
+								'site_id',
+								'site_class',
+								'site_status',
+								'site_hub_id',
+								'site_hub_name',
+								'site_implementation_name',
+								'site_type_name',
+								'site_name',
+								'category_type_id',
+								'category_type_name',
+								'beneficiary_type_id',
+								'beneficiary_type_name',
+								'beneficiary_category_name',
+								'strategic_objective_id',
+								'strategic_objective_name',
+								'strategic_objective_description',
+								'sector_objective_id',
+								'sector_objective_name',
+								'sector_objective_description',
+								'activity_type_id',
+								'activity_type_name',
+								'activity_description_id',
+								'activity_description_name',
+								'activity_detail_id',
+								'activity_detail_name',
+								'indicator_id',
+								'indicator_name',
+								'activity_status_id',
+								'activity_status_name',
+								'delivery_type_id',
+								'delivery_type_name',
+								'distribution_status',
+								'distribution_start_date',
+								'distribution_end_date',
+								'partial_kits',
+								'kit_details',
+								'units',
+								'unit_type_id',
+								'unit_type_name',
+								'transfer_type_value',
+								'mpc_delivery_type_id',
+								'mpc_delivery_type_name',
+								'mpc_mechanism_type_id',
+								'mpc_mechanism_type_name',
+								'package_type_id',
+								'households',
+								'families',
+								'boys',
+								'girls',
+								'men',
+								'women',
+								'elderly_men',
+								'elderly_women',
+								'total',
+								'admin1lng',
+								'admin1lat',
+								'admin2lng',
+								'admin2lat',
+								'admin3lng',
+								'admin3lat',
+								'admin4lng',
+								'admin4lat',
+								'admin5lng',
+								'admin5lat',
+								'site_lng',
+								'site_lat',
+								'updatedAt',
+								'createdAt'
+							];
+
+							var total = 0;
+							
+							// format beneficiaries
+							async.eachLimit(beneficiaries, 200, function (d, next) {
 								// hrp code
-								if ( !d.project_hrp_code ) {
+								if (!d.project_hrp_code) {
 									d.project_hrp_code = '-';
 								}
 								// project code
-								if ( !d.project_code ) {
+								if (!d.project_code) {
 									d.project_code = '-';
 								}
 								// project donor
-								if ( d.project_donor ) {
-										var da = [];
-										d.project_donor.forEach( function( d,i ){
-											if (d) da.push( d.project_donor_name );
-										});
-										da.sort();
-										d.donor = da.join(', ');
+								if (d.project_donor) {
+									var da = [];
+									d.project_donor.forEach(function (d, i) {
+										if (d) da.push(d.project_donor_name);
+									});
+									da.sort();
+									d.donor = da.join(', ');
 								}
+
+								//implementing_partner
+								if (Array.isArray(d.implementing_partners)) {
+									var im = [];
+									d.implementing_partners.forEach(function (impl, i) {
+										if (impl) im.push(impl.organization_name);
+									});
+									im.sort();
+									d.implementing_partners = im.join(', ');
+								}
+
 								// sum
 								var sum = d.boys + d.girls + d.men + d.women + d.elderly_men + d.elderly_women;
 								// beneficiaries
 								d.total = sum;
-								d.report_month_number = d.report_month+1;
-								d.report_month = moment( d.reporting_period ).format( 'MMMM' );
-								d.reporting_period = moment( d.reporting_period ).format( 'YYYY-MM-DD' );
+								d.report_month_number = d.report_month + 1;
+								d.report_month = moment(d.reporting_period).format('MMMM');
+								d.reporting_period = moment(d.reporting_period).format('YYYY-MM-DD');
+								d.updatedAt = moment(d.updatedAt).format('YYYY-MM-DD HH:mm:ss');
+								d.createdAt = moment(d.createdAt).format('YYYY-MM-DD HH:mm:ss');
 								// grand total
 								total += sum;
+								next();
+
+							}, function (err) {
+								if (err) return res.negotiate(err);
+								// return csv
+								json2csv({ data: beneficiaries, fields: fields, fieldNames: fieldNames }, function (err, csv) {
+
+									// error
+									if (err) return res.negotiate(err);
+
+									// success
+									if (params.ocha) {
+										res.set('Content-Type', 'text/csv');
+										filename = req.param('reportname') ? req.param('reportname') : 'beneficiaries'
+										res.setHeader('Content-disposition', 'attachment; filename=' + filename + '.csv');
+										res.send(200, csv);
+										MetricsController.setApiMetrics({
+											dashboard: 'cluster_dashboard',
+											theme: params.indicator,
+											url: req.url,
+										}, function (err) { return })									
+									} else {
+										return res.json(200, { data: csv });
+									}
+								});
 							});
-
-							var fields = [
-										'project_id',
-										'report_id',
-										'cluster_id',
-										'cluster',
-										'mpc_purpose_cluster_id',
-										'mpc_purpose_type_name',
-										'organization',
-										'implementing_partners',
-										'project_hrp_code',
-										'project_code',
-										'project_title',
-										'project_start_date',
-										'project_end_date',
-										'donor',
-										'report_month_number',
-										'report_month',
-										'report_year',
-										'reporting_period',
-										'admin0pcode',
-										'admin0name',
-										'admin1pcode',
-										'admin1name',
-										'admin2pcode',
-										'admin2name',
-										'admin3pcode',
-										'admin3name',
-										'admin4pcode',
-										'admin4name',
-										'admin5pcode',
-										'admin5name',
-										'conflict',
-										'site_id',
-										'site_class',
-										'site_status',
-										'site_hub_id',
-										'site_hub_name',
-										'site_implementation_name',
-										'site_type_name',
-										'site_name',
-										'category_type_id',
-										'category_type_name',
-										'beneficiary_type_id',
-										'beneficiary_type_name',
-										'activity_type_id',
-										'activity_type_name',
-										'activity_description_id',
-										'activity_description_name',
-										'activity_detail_id',
-										'activity_detail_name',
-										'indicator_id',
-										'indicator_name',
-										'activity_status_id',
-										'activity_status_name',
-										'delivery_type_id',
-										'delivery_type_name',
-										'distribution_status',
-										'distribution_start_date',
-										'distribution_end_date',
-										'partial_kits',
-										'kit_details',
-										'units',
-										'unit_type_id',
-										'unit_type_name',
-										'transfer_type_value',
-										'mpc_delivery_type_id',
-										'mpc_delivery_type_name',
-										'mpc_mechanism_type_id',
-										'mpc_mechanism_type_name',
-										'package_type_id',
-										'households',
-										'families',
-										'boys',
-										'girls',
-										'men',
-										'women',
-										'elderly_men',
-										'elderly_women',
-										'total',
-										'admin1lng',
-										'admin1lat',
-										'admin2lng',
-										'admin2lat',
-										'admin3lng',
-										'admin3lat',
-										'admin4lng',
-										'admin4lat',
-										'admin5lng',
-										'admin5lat',
-										'site_lng',
-										'site_lat'
-									],
-
-							fieldNames = [
-									'project_id',
-									'report_id',
-									'cluster_id',
-									'cluster',
-									'mpc_purpose_cluster_id',
-									'mpc_purpose_type_name',
-									'organization',
-									'implementing_partners',
-									'project_hrp_code',
-									'project_code',
-									'project_title',
-									'project_start_date',
-									'project_end_date',
-									'donor',
-									'report_month_number',
-									'report_month',
-									'report_year',
-									'reporting_period',
-									'admin0pcode',
-									'admin0name',
-									'admin1pcode',
-									'admin1name',
-									'admin2pcode',
-									'admin2name',
-									'admin3pcode',
-									'admin3name',
-									'admin4pcode',
-									'admin4name',
-									'admin5pcode',
-									'admin5name',
-									'conflict',
-									'site_id',
-									'site_class',
-									'site_status',
-									'site_hub_id',
-									'site_hub_name',
-									'site_implementation_name',
-									'site_type_name',
-									'site_name',
-									'category_type_id',
-									'category_type_name',
-									'beneficiary_type_id',
-									'beneficiary_type_name',
-									'activity_type_id',
-									'activity_type_name',
-									'activity_description_id',
-									'activity_description_name',
-									'activity_detail_id',
-									'activity_detail_name',
-									'indicator_id',
-									'indicator_name',
-									'activity_status_id',
-									'activity_status_name',
-									'delivery_type_id',
-									'delivery_type_name',
-									'distribution_status',
-									'distribution_start_date',
-									'distribution_end_date',
-									'partial_kits',
-									'kit_details',
-									'units',
-									'unit_type_id',
-									'unit_type_name',
-									'transfer_type_value',
-									'mpc_delivery_type_id',
-									'mpc_delivery_type_name',
-									'mpc_mechanism_type_id',
-									'mpc_mechanism_type_name',
-									'package_type_id',
-									'households',
-									'families',
-									'boys',
-									'girls',
-									'men',
-									'women',
-									'elderly_men',
-									'elderly_women',
-									'total',
-									'admin1lng',
-									'admin1lat',
-									'admin2lng',
-									'admin2lat',
-									'admin3lng',
-									'admin3lat',
-									'admin4lng',
-									'admin4lat',
-									'admin5lng',
-									'admin5lat',
-									'site_lng',
-									'site_lat'
-								];
-
-							// return csv
-							json2csv({ data: beneficiaries, fields: fields, fieldNames: fieldNames }, function( err, csv ) {
-
-								// error
-								if ( err ) return res.negotiate( err );
-
-								// success
-								if ( params.ocha ) {
-									res.set('Content-Type', 'text/csv');
-									return res.send( 200, csv );
-								} else {
-									return res.json( 200, { data: csv } );
-								}
-
-							});
-
 						})
 					});
 				}
@@ -1678,8 +1801,10 @@ var ClusterDashboardController = {
 															} else {
 																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + '</div>';
 															}
-															message += '<div style="text-align:center">' + d._id.site_type_name + '</div>'
-															+ '<div style="text-align:center">' + d._id.site_name + '</div>'
+															if ( d._id.site_type_name ){
+																message += '<div style="text-align:center">' + d._id.site_type_name + '</div>'
+															}
+															message += '<div style="text-align:center">' + d._id.site_name + '</div>'
 															+ '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">CONTACT</h5>'
 															+ '<div style="text-align:center">' + d._id.organization + '</div>'
 															+ '<div style="text-align:center">' + d._id.name + '</div>'
@@ -1795,60 +1920,107 @@ var ClusterDashboardController = {
 
 								switch (req.param('chart_for')) {
 									case 'children':
+										if ($beneficiaries.boys < 1 && $beneficiaries.girls < 1) {
 
-										// calc
+											// // assign data left
+											result.label.left.label.label = 0;
+											result.label.left.subLabel.label = 0;
+											// // assign data center
+											result.label.center.label.label = 0;
+											result.label.center.subLabel.label = 0;
+											// // assign data right
+											result.label.right.label.label = 0;
+											result.label.right.subLabel.label = 0;
 
-										var boysPerCent = ($beneficiaries.boys / ($beneficiaries.boys + $beneficiaries.girls)) * 100;
-										var girlsPerCent = ($beneficiaries.girls / ($beneficiaries.boys + $beneficiaries.girls)) * 100;
-										var totalPerCent = ($beneficiaries.childTotal / ($beneficiaries.elderTotal + $beneficiaries.adultTotal + $beneficiaries.childTotal)) * 100;
+											// // highcharts elderly_women
+											result.data[0].y = 100;
+											result.data[0].label = 0;
+											result.data[0].color = '#c7c7c7';
+											// // highcharts elderly_men
+											result.data[1].y = 0;
+											result.data[1].label = 0;
+											
+											return res.json(200, result);
 
-										// assign data left
-										result.label.left.label.label = boysPerCent;
-										result.label.left.subLabel.label = $beneficiaries.boys;
-										// assign data center
-										result.label.center.label.label = totalPerCent;
-										result.label.center.subLabel.label = $beneficiaries.childTotal;
-										// assign data right
-										result.label.right.label.label = girlsPerCent;
-										result.label.right.subLabel.label = $beneficiaries.girls;
+										} else {
+											// calc
 
-										// highcharts girls
-										result.data[0].y = girlsPerCent;
-										result.data[0].label = $beneficiaries.childTotal;
-										// highcharts boys
-										result.data[1].y = boysPerCent;
-										result.data[1].label = $beneficiaries.childTotal;
-										
-										return res.json(200, result);
+											var boysPerCent = ($beneficiaries.boys / ($beneficiaries.boys + $beneficiaries.girls)) * 100;
+											var girlsPerCent = ($beneficiaries.girls / ($beneficiaries.boys + $beneficiaries.girls)) * 100;
+											var totalPerCent = ($beneficiaries.childTotal / ($beneficiaries.elderTotal + $beneficiaries.adultTotal + $beneficiaries.childTotal)) * 100;
+
+											// assign data left
+											result.label.left.label.label = boysPerCent;
+											result.label.left.subLabel.label = $beneficiaries.boys;
+											// assign data center
+											result.label.center.label.label = totalPerCent;
+											result.label.center.subLabel.label = $beneficiaries.childTotal;
+											// assign data right
+											result.label.right.label.label = girlsPerCent;
+											result.label.right.subLabel.label = $beneficiaries.girls;
+
+											// highcharts girls
+											result.data[0].y = girlsPerCent;
+											result.data[0].label = $beneficiaries.childTotal;
+											// highcharts boys
+											result.data[1].y = boysPerCent;
+											result.data[1].label = $beneficiaries.childTotal;
+											
+											return res.json(200, result);
+										}
 
 										break;
 
 									case 'adult':
+										if ($beneficiaries.men < 1 && $beneficiaries.women < 1) {
 
-										// calc
+											// // assign data left
+											result.label.left.label.label = 0;
+											result.label.left.subLabel.label = 0;
+											// // assign data center
+											result.label.center.label.label = 0;
+											result.label.center.subLabel.label = 0;
+											// // assign data right
+											result.label.right.label.label = 0;
+											result.label.right.subLabel.label = 0;
 
-										var mensPerCent = ($beneficiaries.men / ($beneficiaries.men + $beneficiaries.women)) * 100;
-										var womensPerCent = ($beneficiaries.women / ($beneficiaries.men + $beneficiaries.women)) * 100;
-										var totalPerCent = ($beneficiaries.adultTotal / ($beneficiaries.elderTotal + $beneficiaries.adultTotal + $beneficiaries.childTotal)) * 100;
-									
-										// // assign data left
-										result.label.left.label.label = mensPerCent;
-										result.label.left.subLabel.label = $beneficiaries.men;
-										// // assign data center
-										result.label.center.label.label = totalPerCent;
-										result.label.center.subLabel.label = $beneficiaries.adultTotal;
-										// // assign data right
-										result.label.right.label.label = womensPerCent;
-										result.label.right.subLabel.label = $beneficiaries.women;
+											// // highcharts elderly_women
+											result.data[0].y = 100;
+											result.data[0].label = 0;
+											result.data[0].color = '#c7c7c7';
+											// // highcharts elderly_men
+											result.data[1].y = 0;
+											result.data[1].label = 0;
+											
+											return res.json(200, result);
 
-										// // highcharts women
-										result.data[0].y = womensPerCent;
-										result.data[0].label = $beneficiaries.adultTotal;
-										// // highcharts men
-										result.data[1].y = mensPerCent;
-										result.data[1].label = $beneficiaries.adultTotal;
+										} else {
+											// calc
+
+											var mensPerCent = ($beneficiaries.men / ($beneficiaries.men + $beneficiaries.women)) * 100;
+											var womensPerCent = ($beneficiaries.women / ($beneficiaries.men + $beneficiaries.women)) * 100;
+											var totalPerCent = ($beneficiaries.adultTotal / ($beneficiaries.elderTotal + $beneficiaries.adultTotal + $beneficiaries.childTotal)) * 100;
 										
-										return res.json(200, result);
+											// // assign data left
+											result.label.left.label.label = mensPerCent;
+											result.label.left.subLabel.label = $beneficiaries.men;
+											// // assign data center
+											result.label.center.label.label = totalPerCent;
+											result.label.center.subLabel.label = $beneficiaries.adultTotal;
+											// // assign data right
+											result.label.right.label.label = womensPerCent;
+											result.label.right.subLabel.label = $beneficiaries.women;
+
+											// // highcharts women
+											result.data[0].y = womensPerCent;
+											result.data[0].label = $beneficiaries.adultTotal;
+											// // highcharts men
+											result.data[1].y = mensPerCent;
+											result.data[1].label = $beneficiaries.adultTotal;
+											
+											return res.json(200, result);
+
+										}
 
 										break;
 
@@ -1904,6 +2076,7 @@ var ClusterDashboardController = {
 										break;
 
 										default:
+											return res.json( 200, { value:0 });
 											break;
 									}
 
@@ -1914,6 +2087,10 @@ var ClusterDashboardController = {
 										
 				break;
 				
+				default: 
+					return res.json( 200, { value:0 });
+					break;
+
 
 		}
 

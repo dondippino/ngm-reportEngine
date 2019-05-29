@@ -165,10 +165,11 @@ module.exports.routes = {
   // ACTIVITY REPORTS
   'POST /cluster/report/getReportCsv': 'Cluster/Reports/ReportController.getReportCsv',
   'POST /cluster/report/getReportsList': 'Cluster/Reports/ReportController.getReportsList',
-  // 'POST /cluster/report/getReport': 'Cluster/Reports/ReportController.getReportById',
-  'POST /cluster/report/getReport': 'Cluster/Reports/ReportController.getReportByIdBulk',
-  // 'POST /cluster/report/setReport': 'Cluster/Reports/ReportController.setReportById',
-  'POST /cluster/report/setReport': 'Cluster/Reports/ReportController.setReportByIdBulk',
+  'POST /cluster/report/getReportDetailsById': 'Cluster/Reports/ReportController.getReportDetailsById',
+  'POST /cluster/report/getReport': 'Cluster/Reports/ReportController.getReport',
+  'POST /cluster/report/setReport': 'Cluster/Reports/ReportController.setReportById',
+	'POST /cluster/report/updateReportStatus': 'Cluster/Reports/ReportController.updateReportStatus',
+	'POST /cluster/report/updateReportValidation': 'Cluster/Reports/ReportController.updateReportValidation',
   'POST /cluster/report/removeBeneficiary': 'Cluster/Reports/ReportController.removeBeneficiary',
   'POST /cluster/report/removeTraining': 'Cluster/Reports/ReportController.removeTrainingById',
   'POST /cluster/report/removeTrainee': 'Cluster/Reports/ReportController.removeTraineeById',
@@ -176,6 +177,10 @@ module.exports.routes = {
   // STOCK / ACTIVITY REPORTS TASKS
   'GET /cluster/report/setStocksToDo': 'Cluster/Reports/ReportTasksController.setStocksToDo',
   'GET /cluster/report/setReportsToDo': 'Cluster/Reports/ReportTasksController.setReportsToDo',
+
+  'GET /cluster/report/setStocksToDoPreviousMonth': 'Cluster/Reports/ReportTasksController.setStocksToDoPreviousMonth',
+  'GET /cluster/report/setReportsToDoPreviousMonth': 'Cluster/Reports/ReportTasksController.setReportsToDoPreviousMonth',
+
   'GET /cluster/report/setReportsOpen': 'Cluster/Reports/ReportTasksController.setReportsOpen',
   'GET /cluster/report/setReportsReminder': 'Cluster/Reports/ReportTasksController.setReportsReminder',
 
