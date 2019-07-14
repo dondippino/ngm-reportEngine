@@ -175,8 +175,6 @@ module.exports.routes = {
 	'POST /cluster/report/updateReportStatus': 'Cluster/Reports/ReportController.updateReportStatus',
 	'POST /cluster/report/updateReportValidation': 'Cluster/Reports/ReportController.updateReportValidation',
   'POST /cluster/report/removeBeneficiary': 'Cluster/Reports/ReportController.removeBeneficiary',
-  'POST /cluster/report/removeTraining': 'Cluster/Reports/ReportController.removeTrainingById',
-  'POST /cluster/report/removeTrainee': 'Cluster/Reports/ReportController.removeTraineeById',
 
   // STOCK / ACTIVITY REPORTS TASKS
   'GET /cluster/report/setStocksToDo': 'Cluster/Reports/ReportTasksController.setStocksToDo',
@@ -187,6 +185,7 @@ module.exports.routes = {
 
   'GET /cluster/report/setReportsOpen': 'Cluster/Reports/ReportTasksController.setReportsOpen',
   'GET /cluster/report/setReportsReminder': 'Cluster/Reports/ReportTasksController.setReportsReminder',
+  'GET /cluster/report/setReportsReminderAllMonths': 'Cluster/Reports/ReportTasksController.setReportsReminderAllMonths',
 
   // CLUSTER DASHBOARD
   // 'GET /cluster/latestUpdate': 'Cluster/Dashboards/ClusterDashboardController.getlatestUpdate',

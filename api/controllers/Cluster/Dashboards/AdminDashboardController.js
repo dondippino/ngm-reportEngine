@@ -52,6 +52,7 @@ var AdminDashboardController = {
           end_date: req.param( 'end_date' )
       }
   
+    params.organization_and_cluster_filter_Native = { $and: [params.cluster_filter, params.organization_filter_Native] };
   
     // csv export
     var json2csv = require( 'json2csv' ),
@@ -82,7 +83,6 @@ var AdminDashboardController = {
         // get organizations by project
         StockReport
           .find()
-          .where( params.cluster_filter )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -110,7 +110,6 @@ var AdminDashboardController = {
           // get organizations by project
           StockReport
             .find()
-            .where( params.cluster_filter )
             .where( params.acbar_partners_filter )
             .where( params.adminRpcode_filter )
             .where( params.admin0pcode_filter )
@@ -179,7 +178,6 @@ var AdminDashboardController = {
 
         StockReport
           .find( {}, { fields: {_id: 1} } )
-          .where( params.cluster_filter )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -207,7 +205,6 @@ var AdminDashboardController = {
         // reports total
         StockReport
           .find()
-          .where( params.cluster_filter )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -275,7 +272,6 @@ var AdminDashboardController = {
         // reports due
         StockReport
           .find()
-          .where( params.cluster_filter )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -377,7 +373,6 @@ var AdminDashboardController = {
         // reports complete
         StockReport
           .find()
-          .where( params.cluster_filter )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -480,7 +475,6 @@ var AdminDashboardController = {
         // reports due
         StockReport
           .find()
-          .where(params.cluster_filter)
           .where(params.acbar_partners_filter)
           .where(params.adminRpcode_filter)
           .where(params.admin0pcode_filter)
@@ -537,7 +531,6 @@ var AdminDashboardController = {
         // reports total
         StockReport
           .find()
-          .where( params.cluster_filter )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -553,12 +546,11 @@ var AdminDashboardController = {
             // reports complete
             Report
               .find()
-              .where( params.cluster_filter )
+              .where( params.organization_and_cluster_filter_Native )
               .where( params.acbar_partners_filter )
               .where( params.adminRpcode_filter )
               .where( params.admin0pcode_filter )
               .where( { reporting_period: { '>=': new Date( params.start_date ), '<=': new Date( params.end_date ) } } )
-              .where( params.organization_filter )
               .where( { report_active: true } )
               .where( { report_status: 'complete' } )
               .sort('updatedAt DESC')
@@ -594,14 +586,13 @@ var AdminDashboardController = {
         // get organizations by project
         Report
           .find()
-          .where( params.cluster_filter )
+          .where( params.organization_and_cluster_filter_Native )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
           .where( params.activity_type_id )
           .where( { project_start_date: { '<=': new Date( params.end_date ) } } )
           .where( { project_end_date: { '>=': new Date( params.start_date ) } } )
-          .where( params.organization_filter )
           .sort( 'updatedAt DESC' )
           .limit(1)
           .exec( function( err, reports ){
@@ -624,14 +615,13 @@ var AdminDashboardController = {
           // get organizations by project
           Project
             .find()
-            .where( params.cluster_filter )
+            .where( params.organization_and_cluster_filter_Native )
             .where( params.acbar_partners_filter )
             .where( params.adminRpcode_filter )
             .where( params.admin0pcode_filter )
             .where( params.activity_type_id )
             .where( { project_start_date: { '<=': new Date( params.end_date ) } } )
             .where( { project_end_date: { '>=': new Date( params.start_date ) } } )
-            .where( params.organization_filter )
             .exec( function( err, projects ){
 
               // return error
@@ -696,7 +686,7 @@ var AdminDashboardController = {
         // Projects total
         Report
           .find()
-          .where( params.cluster_filter )
+          .where( params.organization_and_cluster_filter_Native )
           .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
@@ -704,7 +694,6 @@ var AdminDashboardController = {
           .where( params.activity_type_id )
           .where( { report_status: [ 'todo', 'complete' ] } )
           .where( { reporting_period: { '>=': params.moment( params.start_date ).format('YYYY-MM-DD'), '<=': params.moment( params.end_date ).format('YYYY-MM-DD') } } )
-          .where( params.organization_filter )
           .sort('updatedAt DESC')
           .exec( function( err, reports ){
 
@@ -724,7 +713,7 @@ var AdminDashboardController = {
       case 'reports_saved':
         
         // match clause for native mongo query
-        var filterObject = _.extend({}, params.cluster_filter,
+        var filterObject = _.extend({}, params.organization_and_cluster_filter_Native,
                                       params.acbar_partners_filter,
                                       params.adminRpcode_filter,
                                       params.admin0pcode_filter,  
@@ -736,7 +725,6 @@ var AdminDashboardController = {
                                           '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
                                         } 
                                       },
-                                      params.organization_filter_Native 
                                   );  
         // reports due
         Report.native(function(err, collection) {
@@ -817,7 +805,7 @@ var AdminDashboardController = {
       case 'reports_submitted':
 
         // reports complete
-        var filterObject = _.extend({}, params.cluster_filter,
+        var filterObject = _.extend({}, params.organization_and_cluster_filter_Native,
                                         params.acbar_partners_filter,
                                         params.adminRpcode_filter,
                                         params.admin0pcode_filter,  
@@ -829,7 +817,6 @@ var AdminDashboardController = {
                                             '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
                                           } 
                                         },
-                                        params.organization_filter_Native 
                                       );
 
         Report.native(function(err, collection) {
@@ -872,95 +859,77 @@ var AdminDashboardController = {
                           }
                         }
                       ]).toArray(function (err, results) {
-                                    if (err) return res.serverError(err);
+                        if (err) return res.serverError(err);
 
-                                    // for reports not submitted with entries
-                                    var non_empty_reports=_.map(results,'_id')    
-                                    
-                                    TrainingParticipants.native(function(err, collection) {
-                                      if (err) return res.serverError(err);
-                                    
-                                      collection.aggregate([
-                                          { 
-                                            $match : {report_id:{"$in":reports_array}} 
-                                          },
-                                          {
-                                            $group: {
-                                              _id: '$report_id'
-                                            }
-                                          }
-                                        ]).toArray(function (err, results) {
+                        // for reports not submitted with entries
+                        var non_empty_reports=_.map(results,'_id')    
 
-                                                  if (err) return res.serverError(err);
-                                                  var non_empty_train_reports=_.map(results,'_id')
+                        // reports
+                        reports.forEach( function( d, i ){
 
-                                                  // reports
-                                                  reports.forEach( function( d, i ){
+                              // add status
+                              reports[i].id           = reports[i]._id.toString();
+                              reports[i].status       = '#4db6ac'
+                              reports[i].status_title = 'Complete';
+  														reports[i].icon         = 'check_circle';
+  														if (reports[i].report_validation && reports[i].report_validation === 'valid') {
+  															reports[i].icon = 'done_all';
+  															reports[i].status = '#4db6ac';
+  														}
+  														if (reports[i].report_validation && reports[i].report_validation === 'invalid') {
+  															reports[i].icon = 'not_interested';
+  															reports[i].status = '#f44336';
+  														}
+  														if (reports[i].report_validation && reports[i].report_validation === 'checked') {
+  															reports[i].icon = 'watch_later';
+  															reports[i].status = '#4db6ac';
+  														}
+                              reports[i].report_month_format = moment( reports[i].report_month+1, 'MM' ).format('MMMM');
+                              reports[i].report_link = params.url + '#/cluster/projects/report/' + reports[i].project_id + '/' + reports[i]._id.toString();
 
-                                                        // add status
-                                                        reports[i].id           = reports[i]._id.toString();
-                                                        reports[i].status       = '#4db6ac'
-                                                        reports[i].status_title = 'Complete';
-																												reports[i].icon         = 'check_circle';
-																												if (reports[i].report_validation && reports[i].report_validation === 'valid') {
-																													reports[i].icon = 'done_all';
-																													reports[i].status = '#4db6ac';
-																												}
-																												if (reports[i].report_validation && reports[i].report_validation === 'invalid') {
-																													reports[i].icon = 'not_interested';
-																													reports[i].status = '#f44336';
-																												}
-																												if (reports[i].report_validation && reports[i].report_validation === 'checked') {
-																													reports[i].icon = 'watch_later';
-																													reports[i].status = '#4db6ac';
-																												}
-                                                        reports[i].report_month_format = moment( reports[i].report_month+1, 'MM' ).format('MMMM');
-                                                        reports[i].report_link = params.url + '#/cluster/projects/report/' + reports[i].project_id + '/' + reports[i]._id.toString();
+                              // if benficiaries
+                              if ( non_empty_reports.indexOf(d._id.toString())<0 ) {
+                                        // add status                   
+                                        reports[i].status       = '#80cbc4';
+                                        reports[i].icon         = 'adjust';
+                                        reports[i].status_title = 'Empty Submission';
+                                      }
 
-                                                        // if benficiaries
-                                                        if ( non_empty_reports.indexOf(d._id.toString())<0&&non_empty_train_reports.indexOf(d._id.toString())<0  ) {
-                                                                  // add status                   
-                                                                  reports[i].status       = '#80cbc4';
-                                                                  reports[i].icon         = 'adjust';
-                                                                  reports[i].status_title = 'Empty Submission';
-                                                                }
+                                      // set implementing partners icon
+                                      if (req.param('organization_tag') !== 'all' && d.implementing_partners && d.implementing_partners.length) {
+                                        if (d.implementing_partners.filter(o => o.organization_tag === req.param('organization_tag')).length) {
+                                          reports[i].icon = 'group';
+                                          reports[i].status = '#2196F3';
+                                          reports[i].status_title = 'Complete';
+                                        }
+                                      }
+                                      // return
+                                      counter++;
+                                      if ( counter === length ) {
 
-                                                                // set implementing partners icon
-                                                                if (req.param('organization_tag') !== 'all' && d.implementing_partners && d.implementing_partners.length) {
-                                                                  if (d.implementing_partners.filter(o => o.organization_tag === req.param('organization_tag')).length) {
-                                                                    reports[i].icon = 'group';
-                                                                    reports[i].status = '#2196F3';
-                                                                    reports[i].status_title = 'Complete';
-                                                                  }
-                                                                }
-                                                                // return
-                                                                counter++;
-                                                                if ( counter === length ) {
+                                        // !csv
+                                        if ( !params.csv ) {
+                                          // table
+                                          return res.json( 200, reports );
+                                        }
 
-                                                                  // !csv
-                                                                  if ( !params.csv ) {
-                                                                    // table
-                                                                    return res.json( 200, reports );
-                                                                  }
+                                        // csv
+                                        if ( params.csv ) {
 
-                                                                  // csv
-                                                                  if ( params.csv ) {
+                                          // return csv
+                                          json2csv({ data: reports, fields: fields, fieldNames: fieldNames  }, function( err, csv ) {
 
-                                                                    // return csv
-                                                                    json2csv({ data: reports, fields: fields, fieldNames: fieldNames  }, function( err, csv ) {
+                                            // error
+                                            if ( err ) return res.negotiate( err );
 
-                                                                      // error
-                                                                      if ( err ) return res.negotiate( err );
+                                            // success
+                                            return res.json( 200, { data: csv } );
 
-                                                                      // success
-                                                                      return res.json( 200, { data: csv } );
-
-                                                                    });
-                                                                  }
-                                                                }
-                                                    });
-                                              });
-                                    });
+                                          });
+                                        }
+                                      }
+                        });
+                        
                       });
                   });
                 }
@@ -977,7 +946,7 @@ var AdminDashboardController = {
       case 'reports_due':
 
         // match clause for native mongo query
-        var filterObject = _.extend({},	params.cluster_filter,
+        var filterObject = _.extend({},	params.organization_and_cluster_filter_Native,
                                       params.acbar_partners_filter,
                                       params.adminRpcode_filter,
                                       params.admin0pcode_filter,  
@@ -989,8 +958,8 @@ var AdminDashboardController = {
                                           '$lte': new Date(params.moment( params.end_date   ).format('YYYY-MM-DD'))
                                         } 
                                       },
-                                      params.organization_filter_Native 
-                                  );  
+                                  );
+        
         // reports due
         Report.native(function(err, collection) {
           if (err) return res.serverError(err);
@@ -1110,15 +1079,14 @@ var AdminDashboardController = {
         // reports total
         Report
           .find()
-          .where( params.cluster_filter )
-          .where( params.acbar_partners_filter )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
+          .where( params.organization_and_cluster_filter_Native )
           .where( { report_active: true } )
           .where( params.activity_type_id )
+          .where( params.acbar_partners_filter )
           .where( { report_status: [ 'todo', 'complete' ] } )
           .where( { reporting_period: { '>=': params.moment( params.start_date ).format('YYYY-MM-DD'), '<=': params.moment( params.end_date ).format('YYYY-MM-DD') } } )
-          .where( params.organization_filter )
           .sort('updatedAt DESC')
           .exec( function( err, reports ){
 
@@ -1197,7 +1165,7 @@ var AdminDashboardController = {
             // reports complete
             Report
               .find()
-              .where( params.cluster_filter )
+              .where( params.organization_and_cluster_filter_Native )
               .where( params.acbar_partners_filter )
               .where( params.adminRpcode_filter )
               .where( params.admin0pcode_filter )
@@ -1205,7 +1173,6 @@ var AdminDashboardController = {
               .where( params.activity_type_id )
               .where( { report_status: 'complete' } )
               .where( { reporting_period: { '>=': params.moment( params.start_date ).format('YYYY-MM-DD'), '<=': params.moment( params.end_date ).format('YYYY-MM-DD') } } )
-              .where( params.organization_filter )
               .sort('updatedAt DESC')
               .exec( function( err, reports ){
 
@@ -1234,10 +1201,9 @@ var AdminDashboardController = {
           .where( { project_id: { '!': null } } )
           .where( params.adminRpcode_filter )
           .where( params.admin0pcode_filter )
-          .where( params.cluster_filter )
+          .where( params.organization_and_cluster_filter_Native )
           .where( params.activity_type_id )
           .where( params.acbar_partners_filter )
-          .where( params.organization_filter )
           .where( { project_budget_date_recieved: { '>=': new Date( params.start_date ), '<=': new Date( params.end_date ) } } )
           .exec( function( err, budget ){
 
@@ -1303,9 +1269,8 @@ var AdminDashboardController = {
 					filters.default_native,
 					filters.adminRpcode_Native,
 					filters.admin0pcode_Native,
-					filters.cluster_id_Native,
+          { $and: [filters.cluster_id_Native, filters.organization_tag_Native] },
 					filters.activity_typeNative,
-					filters.organization_tag_Native,					
 					filters.project_startDateNative,
 					filters.project_endDateNative)
 										
