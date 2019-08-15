@@ -58,7 +58,9 @@ module.exports.routes = {
   'GET /getOrganizationIndicator': 'ReportHub/OrganizationController.getOrganizationIndicator',
   'POST /getOrganizationIndicator': 'ReportHub/OrganizationController.getOrganizationIndicator',
   'GET /setOrganizationPartner': 'ReportHub/OrganizationController.setOrganizationPartner',
-  'POST /setOrganizationPartner': 'ReportHub/OrganizationController.setOrganizationPartner',
+	'POST /setOrganizationPartner': 'ReportHub/OrganizationController.setOrganizationPartner',
+	'GET /getOrganizationsByFilter': 'ReportHub/OrganizationController.getOrganizationsByFilter',
+	'POST /getOrganizationsByFilter': 'ReportHub/OrganizationController.getOrganizationsByFilter',
 
   // Metrics
   'POST /metrics/set': 'ReportHub/MetricsController.set',
@@ -175,6 +177,8 @@ module.exports.routes = {
 	'POST /cluster/report/updateReportStatus': 'Cluster/Reports/ReportController.updateReportStatus',
 	'POST /cluster/report/updateReportValidation': 'Cluster/Reports/ReportController.updateReportValidation',
   'POST /cluster/report/removeBeneficiary': 'Cluster/Reports/ReportController.removeBeneficiary',
+  'POST /cluster/report/delete': 'Cluster/Reports/ReportController.deleteReportById',
+
 
   // STOCK / ACTIVITY REPORTS TASKS
   'GET /cluster/report/setStocksToDo': 'Cluster/Reports/ReportTasksController.setStocksToDo',
@@ -190,8 +194,11 @@ module.exports.routes = {
   // CLUSTER DASHBOARD
   // 'GET /cluster/latestUpdate': 'Cluster/Dashboards/ClusterDashboardController.getlatestUpdate',
   'GET /cluster/indicator': 'Cluster/Dashboards/ClusterDashboardController.getIndicator',
-  'POST /cluster/indicator': 'Cluster/Dashboards/ClusterDashboardController.getIndicator',
+  'POST /cluster/indicator': 'Cluster/Dashboards/ClusterDashboardController.getIndicator', 
 
+  //4wprojectplanDASHBOARD
+  'GET /cluster/indicator4wprojectplan': 'Cluster/Dashboards/Cluster4wprojectplanDashboardController.getIndicator',
+  'POST /cluster/indicator4wprojectplan': 'Cluster/Dashboards/Cluster4wprojectplanDashboardController.getIndicator', 
 
   // -------- HEALTH --------
   // 4W Dashboard
