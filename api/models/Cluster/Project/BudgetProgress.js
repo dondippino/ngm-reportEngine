@@ -113,6 +113,9 @@ module.exports = {
 		multi_year_funding_name: {
 			type: 'string'
 		},
+		multi_year_array:{
+			type: 'array'
+		},
 		funding_2017: {
 			type: 'float',
 		},
@@ -131,7 +134,7 @@ module.exports = {
 		comments: {
 			type: 'string'
 		},
-
+ 
 		// project
 		project_acbar_partner: {
 			type: 'boolean'
@@ -140,6 +143,12 @@ module.exports = {
 			type: 'string',
 			required: true
 		},
+
+	//New column plans and components
+		plan_component: {
+			type: 'array'
+		},
+
 		project_code: {
 			type: 'string'
 		},
@@ -182,6 +191,9 @@ module.exports = {
 			type: 'string'
 		},
 		inter_cluster_activities: {
+			type: 'array'
+		},
+		implementing_partners: {
 			type: 'array'
 		},
 

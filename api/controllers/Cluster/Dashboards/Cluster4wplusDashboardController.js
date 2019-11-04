@@ -8,10 +8,10 @@
 // require
 var moment = require( 'moment' );
 var json2csv = require( 'json2csv' );
-var $nin_organizations = [ 'immap', 'arcs' ]; 
+var $nin_organizations = [ 'immap', 'arcs' ];
 var async = require('async');
 
-var ClusterDashboardController = {
+var Cluster4wplusDashboardController = {
 
 	// flatten json
 	flatten: function( json ) {
@@ -23,9 +23,38 @@ var ClusterDashboardController = {
 		}
 		return array;
 	},
+
+	exchangeRatesCurrencies: function(req, res){
+
+		var excangeratescurrencies = []; 
+
+         var request = require('request');
+
+		//api to find exchange rates from EURO to others currencies
+			  request.get({
+						  url: 'https://api.exchangeratesapi.io/latest'
+						}, function(error, response, body) {
+						  if (error) {
+						  }
+						  else {
+			
+						   newbody = JSON.parse(body);
+						
+						  excangeratescurrencies.push(newbody.rates.USD);
+
+						// console.log("EURO A DOLAR1 FUNCTION: ", typeof excangeratescurrencies);
+						 return res.json( 200, excangeratescurrencies);
+						}
+					});
+	},
+
 	
 	// get params from req
 	getParams: function( req, res ){
+
+		       // console.log("REQ PARAM HRPPLAN: ", req.param('hrpplan'));
+
+		
 
 		// request input
 		if ( !req.param('indicator') ||
@@ -33,114 +62,203 @@ var ClusterDashboardController = {
 					!req.param('adminRpcode') ||
 					!req.param('admin0pcode') ||
 					!req.param('organization_tag') ||
+					!req.param('donor')||
 					!req.param('admin1pcode') ||
 					!req.param('admin2pcode') ||
-					!req.param('beneficiaries') ||
+					//!req.param('beneficiaries') ||
 					!req.param('start_date') ||
 					!req.param('end_date') ) {
-			return res.json(401, {err: 'indicator, cluster_id, adminRpcode, admin0pcode, organization_tag, admin1pcode, admin2pcode, beneficiaries, start_date, end_date required!'});
+			return res.json(401, {err: 'indicator, cluster_id, adminRpcode, admin0pcode, organization_tag, donor, admin1pcode, admin2pcode, start_date, end_date required!'});
 		}
 
 		// return params
 		return {
 			csv: req.param('csv') ? req.param('csv') : false,
 			ocha: req.param('ocha') ? req.param('ocha') : false,
-			list: req.param('list') ? req.param('list') : false,
+			list: req.param('list') ? req.param('list') : false, 
 			indicator: req.param('indicator'),
 			cluster_id: req.param('cluster_id'),
 			cluster_ids: req.param('cluster_ids') ? req.param('cluster_ids') : [req.param('cluster_id')],
-			activity_type_id: req.param( 'activity_type_id' ) ? req.param( 'activity_type_id' ) : 'all',
-			activity_description_id: req.param( 'activity_description_id' ) ? req.param( 'activity_description_id' ) : 'all',
 			adminRpcode: req.param('adminRpcode'),
 			admin0pcode: req.param('admin0pcode'),
 			organization_tag: req.param('organization_tag'),
+			donor: req.param('donor'),
 			admin1pcode: req.param('admin1pcode'),
 			admin2pcode: req.param('admin2pcode'),
-			beneficiaries: req.param('beneficiaries'),
+			//beneficiaries: req.param('beneficiaries'),
 			start_date: req.param('start_date'),
-			end_date: req.param('end_date')
+			end_date: req.param('end_date'),
+			eurotousd: req.param('eur'),
+			coptousd: req.param('cop')
 		}
 
 	},
 
 	// return filters
 	getFilters: function( params ){
-		// filters, for waterline and native mongo queries (_Native)  
+
+	
 		return {
-			default: { report_year: { '>=': 2017 }, location_id: { '!': null } },
+			//new default
+			//default: {  project_status: {$in:['active','complete'] }},
+
 			adminRpcode: params.adminRpcode === 'hq' ? {} : { adminRpcode: params.adminRpcode },
 			admin0pcode: params.admin0pcode === 'all' ? {} : { admin0pcode: params.admin0pcode },
-			admin0pcode_act: params.admin0pcode === 'all' ? {} : { admin0pcode: { contains: params.admin0pcode.toUpperCase()} },
 			admin1pcode: params.admin1pcode === 'all' ? {} : { admin1pcode: params.admin1pcode },
 			admin2pcode: params.admin2pcode === 'all' ? {} : { admin2pcode: params.admin2pcode },
-			cluster_id:  ( params.cluster_id === 'all' || params.cluster_id === 'rnr_chapter' || params.cluster_id === 'acbar' ) 
+			
+           cluster_id:  ( params.cluster_id === 'all' || params.cluster_id === 'rnr_chapter' || params.cluster_id === 'acbar' ) 
 								? {} 
 								: ( params.cluster_id !== 'cvwg' )
-									? { or: [{ cluster_id: params.cluster_id }, { mpc_purpose_cluster_id: { contains: params.cluster_id } } ] }
-									: { or: [{ cluster_id: params.cluster_id }, { mpc_purpose_cluster_id: { contains: params.cluster_id } }, { activity_description_id: { contains: 'cash' } }, { mpc_delivery_type_id: ['cash', 'voucher'] } ] },
-			cluster_id_act: params.cluster_id === 'all' ? {} : { cluster_id: params.cluster_id },
-			activity_type_id: params.activity_type_id === 'all'  ? {} : { activity_type_id: params.activity_type_id },
-			activity_description_id: params.activity_description_id === 'all' ? {} : { activity_description_id: params.activity_description_id},
- 			acbar_partners: params.cluster_id === 'acbar' ? { project_acbar_partner: true } : {},
-			organization_tag: params.organization_tag === 'all' ? { organization_tag: { '!': $nin_organizations } } : { organization_tag: params.organization_tag },
-			beneficiaries: params.beneficiaries[0] === 'all' ? {} : { beneficiary_type_id: params.beneficiaries },
-			date: { reporting_period: { '>=': new Date( params.start_date ), '<=': new Date( params.end_date ) } },
+									 ?{cluster_id:params.cluster_id}
+			                     : {inter_cluster_activities:{$elemMatch:{'cluster_id':params.cluster_id}}},
+			 
+	        donor_tagBenef: (params.donor === 'all')
+	                        ? {}
+	                       : {  project_donor : { $elemMatch : { 'project_donor_id' : params.donor}}},
+	        donor_tagBudget: (params.donor === 'all')
+	                        ? {}
 
-			default_Native: { report_year: { $gte: 2017 }, location_id: { $ne: null } },
+	                        : { project_donor_id: params.donor},
+
+	    
+					acbar_partners: params.cluster_id === 'acbar' ? { project_acbar_partner: true } : {},
+			organization_tag: params.organization_tag === 'all' ? { organization_tag: { '!': $nin_organizations } } : { organization_tag: params.organization_tag },
+			
+			//date: { or : [{ reporting_period:{'>=': new Date(params.start_date), '<=': new Date(params.end_date)}},{project_budget_date_recieved: {'>=': new Date(params.start_date), '<=': new Date(params.end_date)}}]},
+             
+            report_period_ben: {reporting_period:{'>=': new Date(params.start_date), '<=': new Date(params.end_date)}},
+            budget_date_recieved: {project_budget_date_recieved: {'>=': new Date(params.start_date), '<=': new Date(params.end_date)}}, 
+
+            project_startDate: { project_start_date : {'>=': new Date( params.start_date)}},
+			project_endDate: { project_end_date : {'<=': new Date( params.end_date)}},
+
+
 			adminRpcode_Native: params.adminRpcode === 'hq'  ? {} : { adminRpcode: params.adminRpcode.toUpperCase() },
 			admin0pcode_Native: params.admin0pcode === 'all' ? {} : { admin0pcode: params.admin0pcode.toUpperCase() },
 			admin1pcode_Native: params.admin1pcode === 'all' ? {} : { admin1pcode: params.admin1pcode.toUpperCase() },
 			admin2pcode_Native: params.admin2pcode === 'all' ? {} : { admin2pcode: params.admin2pcode.toUpperCase() },
-			cluster_id_Native: ( params.cluster_id === 'all' || params.cluster_id === 'rnr_chapter' || params.cluster_id === 'acbar' ) 
+		/*cluster_id_Native: ( params.cluster_id === 'all' || params.cluster_id === 'rnr_chapter' || params.cluster_id === 'acbar' ) 
 								? {} 
 								: ( params.cluster_id !== 'cvwg' )
-									? { $or: [{ cluster_id: params.cluster_id }, { mpc_purpose_cluster_id: { $regex : params.cluster_id } } ] } 
-									: { $or: [{ cluster_id: params.cluster_id }, { mpc_purpose_cluster_id: { $regex : params.cluster_id } }, { activity_description_id: { $regex: 'cash' } }, { mpc_delivery_type_id: { $in: ['cash', 'voucher'] } } ] },
+								
+			                  ?{ $or:[{cluster_id:params.cluster_id},{inter_cluster_activities:{$elemMatch:{'cluster_id':params.cluster_id}}}]}
+			                    : {inter_cluster_activities:{$elemMatch:{'cluster_id':params.cluster_id}}}, */  
+			
+             cluster_id_Native1:( params.cluster_id === 'all' || params.cluster_id === 'rnr_chapter' || params.cluster_id === 'acbar' ) 
+								? {} 
+								: { cluster_id: params.cluster_id } ,
+			cluster_id_Native2:( params.cluster_id === 'all' || params.cluster_id === 'rnr_chapter' || params.cluster_id === 'acbar' ) 
+								? {} 
+								: { inter_cluster_activities: { $elemMatch:{cluster_id:params.cluster_id}}} ,
+
+								 //: { $in:[{ cluster_id: params.cluster_id }, { inter_cluster_activities: { $elemMatch:{cluster_id:params.cluster_id} }} ]} ,
+
+	         donor_tagBenef_Native: (params.donor === 'all')
+	                        ? {}
+	                       : {  project_donor : { $elemMatch : { 'project_donor_id' : params.donor}}},
+									/*  : { project_donor_id: params.donor}*/
+	        donor_tagBudget_Native: (params.donor === 'all')
+	                        ? {}
+
+	                        : { project_donor_id: params.donor},
+	                      
+
 			cluster_ids_Native: ( params.cluster_ids.includes('all') || params.cluster_ids.includes('rnr_chapter') || params.cluster_ids.includes('acbar') ) 
 								? {} 
 								: ( params.cluster_ids.includes('cvwg') )
-									? { $or: [{ cluster_id: { $in: params.cluster_ids } }, { "mpc_purpose.cluster_id" : { $in : params.cluster_ids }}, { activity_description_id: { $regex: 'cash' } }, { mpc_delivery_type_id: { $in: ['cash', 'voucher'] } } ] }
-									: { $or: [{ cluster_id: { $in: params.cluster_ids } }, { "mpc_purpose.cluster_id" : { $in : params.cluster_ids }} ] },
+								
+			                     ?{$or:[{cluster_id:params.cluster_id},{inter_cluster_activities:{ $elemMatch:{'cluster_id':params.cluster_id}}}]}
+			                    :{inter_cluster_activities:{ $elemMatch:{'cluster_id':params.cluster_id}}},
+			                 
 			is_cluster_ids_array: params.cluster_ids ? true : false,
+
 			organization_tag_Native: params.organization_tag === 'all' ? { organization_tag: { $nin: $nin_organizations } } : { organization_tag: params.organization_tag },
-			date_Native: { reporting_period: { $gte: new Date( params.start_date ), $lte: new Date( params.end_date )} },
-			delivery_type_id: function() {
-				var filter = {}
-				if ( params.indicator === 'households_population' ) {
-					filter = { delivery_type_id: 'population' }
-				}
-				if ( params.indicator === 'beneficiaries_population' ) {
-					filter = { delivery_type_id: 'population' }
-				}
-				if ( params.indicator === 'beneficiaries_service' ) {
-					filter = { delivery_type_id: 'service' }
-				}
-				return filter
-			}
+			//dateNative: { $or : [{ reporting_period:{$gte: new Date(params.start_date), $lte: new Date(params.end_date)}},{project_budget_date_recieved: {$gte: new Date(params.start_date), $lte: new Date(params.end_date)}}]},
+            report_period_ben_Native: {reporting_period:{$gte: new Date(params.start_date), $lte: new Date(params.end_date)}},
+            budget_date_recieved_Native: {project_budget_date_recieved: {$gte: new Date(params.start_date), $lte: new Date(params.end_date)}}, 
+
+             project_startDateNative: { project_start_date : { $lte : new Date( params.end_date) }},
+			project_endDateNative: { project_end_date: { $gte: new Date( params.start_date) }},
+			
+
+
 
 		}
 	},
 
 	// indicators
 	getIndicator: function ( req, res  ) {
+		
+         var params = Cluster4wplusDashboardController.getParams( req, res );
 
-		// parmas, filters
-		var params = ClusterDashboardController.getParams( req, res );
-		var filters = ClusterDashboardController.getFilters( params );
+		var filters = Cluster4wplusDashboardController.getFilters( params );
 		// match clause for native mongo query
-		var filterObject = _.extend({},	filters.default_Native,
+
+		
+		/*var filterObject = _.extend({},	filters.default_Native,
 										filters.adminRpcode_Native,
 										filters.admin0pcode_Native,
 										filters.admin1pcode_Native,
 										filters.admin2pcode_Native,
-										filters.is_cluster_ids_array ? filters.cluster_ids_Native : filters.cluster_id_Native,
 										filters.activity_type_id,
-										filters.activity_description_id,
+										filters.cluster_id_Native,
+
+										
+										//filters.is_cluster_ids_array ? filters.cluster_id : filters.cluster_id_Native,
+										//filters.is_cluster_ids_array ? filters.cluster_id : filters.cluster_id_Native,
+
 										filters.acbar_partners,
 										filters.organization_tag_Native,
-										filters.beneficiaries,
-										filters.date_Native,
-										filters.delivery_type_id() )
+										filters.hrp_plan_Native,
+										filters.project_typeNative,
+										filters.implementer_tagNative,
+										filters.donor_tagNative,
+										//filters.beneficiaries,
+										//filters.date_Native,
+										//filters.project_startDateNative,
+										//filters.project_endDateNative
+										//filters.dateNative,
+										filters.report_period_ben,
+										filters.budget_date_recieved
+										//filters.delivery_type_id()
+										//filters.is_cluster_ids_array ? filters.cluster_ids_Native : filters.cluster_id_Native,
+										//filters.cluster_id,
+										//filters.cluster_id,
+
+
+           );*/
+
+           var filterObjectBudget = _.extend({},	filters.default_Native,
+										filters.adminRpcode_Native,
+										filters.admin0pcode_Native,
+										filters.admin1pcode_Native,
+										filters.admin2pcode_Native,
+										filters.cluster_id_Native1,
+										filters.acbar_partners,
+										filters.organization_tag_Native,
+										filters.donor_tagBudget_Native,
+										filters.budget_date_recieved_Native
+							
+
+
+           );
+
+		var filterObjectBenef = _.extend({},	filters.default_Native,
+										filters.adminRpcode_Native,
+										filters.admin0pcode_Native,
+										filters.admin1pcode_Native,
+										filters.admin2pcode_Native,
+										filters.cluster_id_Native1,
+										filters.acbar_partners,
+										filters.organization_tag_Native,
+										filters.donor_tagBenef_Native,
+										filters.report_period_ben_Native
+										
+
+
+           );
+	
 
 		// switch on indicator
 		switch( params.indicator ) {
@@ -155,13 +273,13 @@ var ClusterDashboardController = {
 					.where( filters.admin0pcode )
 					.where( filters.admin1pcode )
 					.where( filters.admin2pcode )
-					.where( filters.cluster_id )
-					.where( filters.activity_type_id )
-					.where( filters.activity_description_id )
-					.where( filters.acbar_partners )
+					.where( filters.clusterid )
 					.where( filters.organization_tag )
-					.where( filters.beneficiaries )
-					.where( filters.date )
+					.where(filters.donor_tagBenef)
+					//.where( filters.beneficiaries )
+					.where(filters.report_period_ben)
+					
+					//.where( filters.date )
 					.sort( 'updatedAt DESC' )
 					.limit(1)
 					.exec( function( err, results ){
@@ -174,129 +292,27 @@ var ClusterDashboardController = {
 
 					});
 
-				break;
-
-
-			case 'organizations':
-				// list of organizations	
-				if ( params.list ) {
-					Beneficiaries.native(function(err, collection) {
-						if (err) return res.serverError(err);
-					
-						collection.aggregate([
-							{ $match : filterObject },
-							{
-							$group: {
-								_id: {organization_tag:'$organization_tag', organization:'$organization'}
-							}
-							},
-						]).toArray(function (err, results) {
-							if (err) return res.serverError(err);
-							organizations=_.pluck(results,'_id')		
-							organizations.sort(function(a, b) {
-								return a.organization.localeCompare(b.organization);
-							});
-							organizations.unshift({
-											organization_tag: 'all',
-											organization: 'ALL',
-										});
-							return res.json( 200, organizations );
-						});
-					});
-				} else {	// count of organizations
-					Beneficiaries.native(function(err, collection) {
-						if (err) return res.serverError(err);
-					
-						collection.aggregate([
-							{ 
-								$match : filterObject 
-							},
-							{
-								$group: {
-									_id: '$organization_tag'
-								}
-							},
-							{
-								$group: {
-									_id: 1,
-									total: {
-									$sum: 1
-									}
-								}
-							}
-						]).toArray(function (err, results) {
-							if (err) return res.serverError(err);
-							return res.json( 200, { 'value': results[0]?results[0].total:0 } );
-						});
-					});	
-				}
-				
-				break;
-
-			// count
-			case 'projects':
-				Beneficiaries.native(function(err, collection) {
+				/*	 Beneficiaries.native(function(err, collection) {
 					if (err) return res.serverError(err);
 				
-					collection.aggregate([
-						{ 
-							$match : filterObject 
-						},
-						{
-							$group: {
-								_id: '$project_id'
-							}
-						},
-						{
-							$group: {
-								_id: 1,
-								total: {
-								$sum: 1
-								}
-							}
-						}
-					]).toArray(function (err, results) {
-						if (err) return res.serverError(err);
-						return res.json( 200, { 'value': results[0]?results[0].total:0 } );
-					});
-				});	
 				
+					collection.aggregate(
+						{ 
+							//$match : filterObject 
+							$match: filterObjectBenef
+						}
+						).sort({updatedAt:-1 }).limit(1).toArray(function (err, results) {
+                 
+              // return error
+				              if (err) return res.negotiate( err );
+				              
+				              return res.json( 200, results[0] );
+						});
+					});*/
+
 				break;
 
-			// count
-			case 'locations':
-				Beneficiaries.native(function(err, collection) {
-					if (err) return res.serverError(err);
-				
-					collection.aggregate([
-						{ 
-							$match : filterObject 
-						},
-						{
-							$group: {
-								_id: {
-									project_id: '$project_id',
-									site_lat: '$site_lat',
-									site_lng: '$site_lng',
-									site_name: '$site_name'
-								}
-							}
-						},
-						{
-							$group: {
-								_id: 1,
-								total: {
-								$sum: 1
-								}
-							}
-						}
-					]).toArray(function (err, results) {
-						if (err) return res.serverError(err);
-						return res.json( 200, { 'value': results[0]?results[0].total:0 } );
-					});
-				});	
-				
-				break;	
+			/*	
 
 			case 'contacts':
 
@@ -335,11 +351,10 @@ var ClusterDashboardController = {
 					.where( filters.admin1pcode )
 					.where( filters.admin2pcode )
 					.where( filters.cluster_id )
-					.where( filters.activity_type_id )
-					.where( filters.activity_description_id )
+					//.where( filters.activity_type_id )
 					.where( filters.acbar_partners )
 					.where( filters.organization_tag )
-					.where( filters.beneficiaries )
+					//.where( filters.beneficiaries )
 					.where( filters.date )
 					.exec( function( err, beneficiaries ){
 
@@ -451,11 +466,10 @@ var ClusterDashboardController = {
 					.where( filters.admin1pcode )
 					.where( filters.admin2pcode )
 					.where( filters.cluster_id )
-					.where( filters.activity_type_id )
-					.where( filters.activity_description_id )
+					//.where( filters.activity_type_id )
 					.where( filters.acbar_partners )
 					.where( filters.organization_tag )
-					.where( filters.beneficiaries )
+					//.where( filters.beneficiaries )
 					.where( filters.date )
 					.exec( function( err, beneficiaries ){
 
@@ -514,7 +528,7 @@ var ClusterDashboardController = {
 						});
 
 						// flatten
-						var report = ClusterDashboardController.flatten( data );
+						var report = Cluster4wprojectplanDashboardController.flatten( data );
 
 						// array to string
 						report.forEach( function( d, i ) {
@@ -559,49 +573,6 @@ var ClusterDashboardController = {
 			case 'financial_report':
 
 				// fields
-
-
-				if(params.admin0pcode.toUpperCase() === 'COL'){
-
-					var fields = [ 
-							'cluster',
-							'organization',
-							'admin0name',
-							'project_title',
-							'project_description',
-							'project_budget',
-							'project_budget_currency',
-							'project_donor_name',
-							'grant_id',
-							'currency_id',
-							'project_budget_amount_recieved',
-							'contribution_status',
-							'project_budget_date_recieved',
-							'budget_funds_name',
-							'email',
-							'createdAt',
-							'comments'
-						],
-						fieldNames = [
-							'Cluster',
-							'Organization',
-							'Country',
-							'Project Title',
-							'Project Description',
-							'Project Budget',
-							'Project Budget Currency',
-							'Project Donor',
-							'Donor Grant ID',
-							'Currency Recieved',
-							'Ammount Received',
-							'Contribution Status',
-							'Date of Payment',
-							'Incoming Funds',
-							'Email',
-							'createdAt',
-							'Comments'
-						];
-				}else{
 				var fields = [ 
 							'cluster',
 							'organization',
@@ -652,7 +623,6 @@ var ClusterDashboardController = {
 							'createdAt',
 							'Comments'
 						];
-					}
 
 				// get beneficiaries by project
 				BudgetProgress
@@ -737,8 +707,7 @@ var ClusterDashboardController = {
 								$group:
 								{
 									_id: null,
-									// total:  { $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } }
-									total:  { $sum: { $add: [ "$total_beneficiaries" ] } }
+									total:  { $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } }
 								}
 							}
 						]
@@ -771,18 +740,37 @@ var ClusterDashboardController = {
 									$group:
 									{
 										_id: null,
-									// total:  { $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } }
-									total:  { $sum: { $add: [ "$total_beneficiaries" ] } }
+										total:  { $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } } ,
 									}
 								}
 							]
 						).toArray(function (err, beneficiaries) {
 							if (err) return res.serverError(err);
+							
+							TrainingParticipants.native(function(err, collection) {
+								if (err) return res.serverError(err);
+							
+								collection.aggregate(
+									[
+										{ 
+											$match : filterObject 
+										},
+										{
+											$group:
+											{
+												_id: null,
+												total:  { $sum: { $add: [ "$trainee_men", "$trainee_women" ] } } ,
+											}
+										}
+									]
+								).toArray(function (err, training_participants) {
+									if (err) return res.serverError(err);
 									
-							var total = beneficiaries[0]?beneficiaries[0].total:0;  
-		
-							return res.json( 200, { 'value': total } );
-
+									var total = beneficiaries[0]?beneficiaries[0].total:0 + training_participants[0]?training_participants[0].total:0  
+				
+									return res.json( 200, { 'value': total } );
+								});
+							});
 						});
 					});
 				}	else	{
@@ -792,252 +780,12 @@ var ClusterDashboardController = {
 					
 						collection.find(filterObject).toArray(function (err, beneficiaries) {
 							if (err) return res.serverError(err);
-
-							if(params.admin0pcode.toUpperCase() === 'COL'){
-
-								var fields = [
-								'project_id',
-								'report_id',
-								'_id',
-								'cluster_id',
-								'cluster',
-								'plan_component',
-								'name',
-								'phone',
-								'email',
-								//'mpc_purpose_cluster_id',
-								//'mpc_purpose_type_name',
-								'organization',
-								'implementing_partners',
-								//'project_hrp_code',
-								'project_code',
-								'project_title',
-								'project_start_date',
-								'project_end_date',
-								'donor',
-								'report_month_number',
-								'report_month',
-								'report_year',
-								'reporting_period',
-								'admin0pcode',
-								'admin0name',
-								'admin1pcode',
-								'admin1name',
-								'admin2pcode',
-								'admin2name',
-								/*'admin3pcode',
-								'admin3name',
-								'admin4pcode',
-								'admin4name',
-								'admin5pcode',
-								'admin5name',
-								'conflict',*/
-								'site_id',
-								/*'site_class',
-								'site_status',
-								'site_hub_id',
-								'site_hub_name',*/
-								'site_implementation_name',
-								'site_type_name',
-								'site_name',
-								/*'category_type_id',
-								'category_type_name',*/
-								'beneficiary_type_id',
-								'beneficiary_type_name',
-								'beneficiary_category_name',
-								'strategic_objective_id',
-								'strategic_objective_name',
-								'strategic_objective_description',
-								'sector_objective_id',
-								'sector_objective_name',
-								'sector_objective_description',
-								'activity_type_id',
-								'activity_type_name',
-								'activity_description_id',
-								'activity_description_name',
-								/*'activity_detail_id',
-								'activity_detail_name',
-								'remarks',*/
-								'indicator_id',
-								'indicator_name',
-								/*'activity_status_id',
-								'activity_status_name',*/
-								'delivery_type_id',
-								'delivery_type_name',
-								/*'distribution_status',
-								'distribution_start_date',
-								'distribution_end_date',
-								'partial_kits',
-								'kit_details',*/
-								'units',
-								'unit_type_id',
-								'unit_type_name',
-								//'transfer_type_value',
-								'mpc_delivery_type_id',
-								'mpc_delivery_type_name',
-								'mpc_mechanism_type_id',
-								'mpc_mechanism_type_name',
-								//'package_type_id',
-								'households',
-								'families',
-								'boys_0_5',
-								'boys_6_11',
-								'boys_12_17',
-								'boys',
-								'men',
-								'elderly_men',
-								'total_male',
-								'girls_0_5',
-								'girls_6_11',
-								'girls_12_17',
-								'girls',
-								'women',
-								'elderly_women',
-								'total_female',
-								'total_beneficiaries',
-								'admin1lng',
-								'admin1lat',
-								'admin2lng',
-								'admin2lat',
-								//'admin3lng',
-								//'admin3lat',
-								//'admin4lng',
-								//'admin4lat',
-								//'admin5lng',
-								//'admin5lat',
-								'site_lng',
-								'site_lat',
-								'updatedAt',
-								'createdAt'
-							],
-
-						fieldNames = [
-								'project_id',
-								'report_id',
-								'beneficiary_id',
-								'cluster_id',
-								'cluster',
-								'plan_component',
-								'focal_point_name',
-								'focal_point_phone',
-								'focal_point_email',
-								//'mpc_purpose_cluster_id',
-								//'mpc_purpose_type_name',
-								'organization',
-								'implementing_partners',
-								//'project_hrp_code',
-								'project_code',
-								'project_title',
-								'project_start_date',
-								'project_end_date',
-								'donor',
-								'report_month_number',
-								'report_month',
-								'report_year',
-								'reporting_period',
-								'admin0pcode',
-								'admin0name',
-								'admin1pcode',
-								'admin1name',
-								'admin2pcode',
-								'admin2name',
-								/*'admin3pcode',
-								'admin3name',
-								'admin4pcode',
-								'admin4name',
-								'admin5pcode',
-								'admin5name',
-								'conflict',*/
-								'site_id',
-								/*'site_class',
-								'site_status',
-								'site_hub_id',
-								'site_hub_name',*/
-								'site_implementation_name',
-								'site_type_name',
-								'site_name',
-								/*'category_type_id',
-								'category_type_name',*/
-								'beneficiary_type_id',
-								'beneficiary_type_name',
-								'beneficiary_category_name',
-								'strategic_objective_id',
-								'strategic_objective_name',
-								'strategic_objective_description',
-								'sector_objective_id',
-								'sector_objective_name',
-								'sector_objective_description',
-								'activity_type_id',
-								'activity_type_name',
-								'activity_description_id',
-								'activity_description_name',
-								/*'activity_detail_id',
-								'activity_detail_name',
-								'remarks',*/
-								'indicator_id',
-								'indicator_name',
-								/*'activity_status_id',
-								'activity_status_name',*/
-								'delivery_type_id',
-								'delivery_type_name',
-								/*'distribution_status',
-								'distribution_start_date',
-								'distribution_end_date',
-								'partial_kits',
-								'kit_details',*/ 
-								'units',
-								'unit_type_id',
-								'unit_type_name',
-								//'transfer_type_value',
-								'mpc_delivery_type_id',
-								'mpc_delivery_type_name',
-								'mpc_mechanism_type_id',
-								'mpc_mechanism_type_name',
-								//'package_type_id',
-								'households',
-								'families',
-								'boys_0_5',
-								'boys_6_11',
-								'boys_12_17',
-								'boys',
-								'men',
-								'elderly_men',
-								'total_male',
-								'girls_0_5',
-								'girls_6_11',
-								'girls_12_17',
-								'girls',
-								'women',
-								'elderly_women',
-								'total_female',
-								'total',
-								'admin1lng',
-								'admin1lat',
-								'admin2lng',
-								'admin2lat',
-								//'admin3lng',
-								//'admin3lat',
-								//'admin4lng',
-								//'admin4lat',
-								//'admin5lng',
-								//'admin5lat',
-								'site_lng',
-								'site_lat',
-								'updatedAt',
-								'createdAt'
-							];
-
-							}else{
 							
 							var fields = [
 								'project_id',
 								'report_id',
-								'_id',
 								'cluster_id',
 								'cluster',
-								'name',
-								'phone',
-								'email',
 								'mpc_purpose_cluster_id',
 								'mpc_purpose_type_name',
 								'organization',
@@ -1084,13 +832,12 @@ var ClusterDashboardController = {
 								'sector_objective_id',
 								'sector_objective_name',
 								'sector_objective_description',
-								'activity_type_id',
+								//'activity_type_id',
 								'activity_type_name',
 								'activity_description_id',
 								'activity_description_name',
 								'activity_detail_id',
 								'activity_detail_name',
-								'remarks',
 								'indicator_id',
 								'indicator_name',
 								'activity_status_id',
@@ -1119,7 +866,7 @@ var ClusterDashboardController = {
 								'women',
 								'elderly_men',
 								'elderly_women',
-								'total_beneficiaries',
+								'total',
 								'admin1lng',
 								'admin1lat',
 								'admin2lng',
@@ -1133,18 +880,14 @@ var ClusterDashboardController = {
 								'site_lng',
 								'site_lat',
 								'updatedAt',
-								'createdAt'
+								'createdAt',
 							],
 
 						fieldNames = [
 								'project_id',
 								'report_id',
-								'beneficiary_id',
 								'cluster_id',
 								'cluster',
-								'focal_point_name',
-								'focal_point_phone',
-								'focal_point_email',
 								'mpc_purpose_cluster_id',
 								'mpc_purpose_type_name',
 								'organization',
@@ -1191,13 +934,12 @@ var ClusterDashboardController = {
 								'sector_objective_id',
 								'sector_objective_name',
 								'sector_objective_description',
-								'activity_type_id',
+								//'activity_type_id',
 								'activity_type_name',
 								'activity_description_id',
 								'activity_description_name',
 								'activity_detail_id',
 								'activity_detail_name',
-								'remarks',
 								'indicator_id',
 								'indicator_name',
 								'activity_status_id',
@@ -1242,16 +984,9 @@ var ClusterDashboardController = {
 								'updatedAt',
 								'createdAt'
 							];
-						};
-
-              if (params.admin0pcode.toUpperCase() === 'AF') {
-                ix = fields.indexOf('activity_description_name') + 1;
-                ix && fields.splice(ix, 0, 'injury_treatment_same_province');
-                ix && fieldNames.splice(ix, 0, 'injury_treatment_same_province');
-              }
 
 							var total = 0;
-
+							
 							// format beneficiaries
 							async.eachLimit(beneficiaries, 200, function (d, next) {
 								// hrp code
@@ -1282,24 +1017,17 @@ var ClusterDashboardController = {
 									d.implementing_partners = im.join(', ');
 								}
 
-								//plan_component
-								if (Array.isArray(d.plan_component)) {
-									
-									d.plan_component = d.plan_component.join(', ');
-								}
-
 								// sum
-								// var sum = d.boys + d.girls + d.men + d.women + d.elderly_men + d.elderly_women;
+								var sum = d.boys + d.girls + d.men + d.women + d.elderly_men + d.elderly_women;
 								// beneficiaries
-								// d.total = sum;
+								d.total = sum;
 								d.report_month_number = d.report_month + 1;
 								d.report_month = moment(d.reporting_period).format('MMMM');
 								d.reporting_period = moment(d.reporting_period).format('YYYY-MM-DD');
 								d.updatedAt = moment(d.updatedAt).format('YYYY-MM-DD HH:mm:ss');
 								d.createdAt = moment(d.createdAt).format('YYYY-MM-DD HH:mm:ss');
 								// grand total
-								// total += sum;
-								total += d.total_beneficiaries;
+								total += sum;
 								next();
 
 							}, function (err) {
@@ -1454,6 +1182,171 @@ var ClusterDashboardController = {
 					});
 
 				break;
+
+
+			// raw data export
+			case 'training_participants':
+
+				// trainings
+				TrainingParticipants
+					.find()
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.cluster_id )
+					.where( filters.acbar_partners )
+					.where( filters.organization_tag )
+					//.where( filters.beneficiaries )
+					.where( filters.date )
+					.exec( function( err, training_participants ){
+
+						// return error
+						if (err) return res.negotiate( err );
+
+						var fields = [
+							'project_id',
+							'project_title',
+							'project_description',
+							'project_start_date',
+							'project_end_date',
+							'project_hrp_code',
+							'project_code',
+							'report_id',
+							'report_month',
+							'report_year',
+							'reporting_period',
+							'report_submitted',
+							'admin0pcode',
+							'admin0name',
+							'cluster_id',
+							'cluster',
+							'organization',
+							'organization_tag',
+							'training_id',
+							'training_title',
+							'training_topics',
+							'training_start_date',
+							'training_end_date',
+							'training_days_number',
+							'training_conducted_by',
+							'training_supported_by',
+							'trainee_affiliation_id',
+							'trainee_affiliation_name',
+							'trainee_health_worker_id',
+							'trainee_health_worker_name',
+							'trainee_men',
+							'trainee_women',
+							'site_id',
+							'site_class',
+							'site_status',
+							'site_name',
+							'site_implementation_id',
+							'site_implementation_name',
+							'site_type_id',
+							'site_type_name',
+							'conflict',
+							'admin1lng',
+							'admin1lat',
+							'admin2lng',
+							'admin2lat',
+							'admin3lat',
+							'admin3lng',
+							'admin4lat',
+							'admin4lng',
+							'admin5lat',
+							'admin5lng',
+							'site_lng',
+							'site_lat',
+							'createdAt',
+							'updatedAt'
+						],
+
+					fieldNames = [
+							'project_id',
+							'project_title',
+							'project_description',
+							'project_start_date',
+							'project_end_date',
+							'project_hrp_code',
+							'project_code',
+							'report_id',
+							'report_month',
+							'report_year',
+							'reporting_period',
+							'report_submitted',
+							'admin0pcode',
+							'admin0name',
+							'cluster_id',
+							'cluster',
+							'organization',
+							'organization_tag',
+							'training_id',
+							'training_title',
+							'training_topics',
+							'training_start_date',
+							'training_end_date',
+							'training_days_number',
+							'training_conducted_by',
+							'training_supported_by',
+							'trainee_affiliation_id',
+							'trainee_affiliation_name',
+							'trainee_health_worker_id',
+							'trainee_health_worker_name',
+							'trainee_men',
+							'trainee_women',
+							'site_id',
+							'site_class',
+							'site_status',
+							'site_name',
+							'site_implementation_id',
+							'site_implementation_name',
+							'site_type_id',
+							'site_type_name',
+							'conflict',
+							'admin1lng',
+							'admin1lat',
+							'admin2lng',
+							'admin2lat',
+							'admin3lat',
+							'admin3lng',
+							'admin4lat',
+							'admin4lng',
+							'admin5lat',
+							'admin5lng',
+							'site_lng',
+							'site_lat',
+							'createdAt',
+							'updatedAt'
+						];
+						// return csv
+
+						training_participants.forEach(function( d, i ){
+							training_participants[ i ].report_month_number = d.report_month+1;
+							training_participants[ i ].report_month = moment( d.reporting_period ).format( 'MMMM' );
+							training_participants[ i ].reporting_period = moment( d.reporting_period ).format( 'YYYY-MM-DD' );
+						});
+
+						json2csv({ data: training_participants, fields: fields, fieldNames: fieldNames }, function( err, csv ) {
+
+							// error
+							if ( err ) return res.negotiate( err );
+
+							// success
+							if ( params.ocha ) {
+								res.set('Content-Type', 'text/csv');
+								return res.send( 200, csv );
+							} else {
+								return res.json( 200, { data: csv } );
+							}
+
+						});
+
+					});
+
+				break;
+
 			
 			// NG WASH
 			// accountability
@@ -1461,7 +1354,7 @@ var ClusterDashboardController = {
 
 				var data = [];
 
-				// accountability
+				// trainings
 				Beneficiaries
 					.find()
 					.where( filters.default )
@@ -1529,7 +1422,7 @@ var ClusterDashboardController = {
 
 				var data = [];
 
-				// boreholes
+				// trainings
 				Beneficiaries
 					.find()
 					.where( filters.default )
@@ -1596,7 +1489,7 @@ var ClusterDashboardController = {
 
 				var data = [];
 
-				// cash
+				// trainings
 				Beneficiaries
 					.find()
 					.where( filters.default )
@@ -1664,7 +1557,7 @@ var ClusterDashboardController = {
 
 				var data = [];
 
-				// hygiene
+				// trainings
 				Beneficiaries
 					.find()
 					.where( filters.default )
@@ -1732,7 +1625,7 @@ var ClusterDashboardController = {
 
 				var data = [];
 
-				// sanitation
+				// trainings
 				Beneficiaries
 					.find()
 					.where( filters.default )
@@ -1800,7 +1693,7 @@ var ClusterDashboardController = {
 
 				var data = [];
 
-				// water
+				// trainings
 				Beneficiaries
 					.find()
 					.where( filters.default )
@@ -1864,109 +1757,7 @@ var ClusterDashboardController = {
 
 				
 
-			// markers
-			case 'markers':
-					
-				// params
-				var locations = [],
-					markers = {},
-					counter = 0,
-					length = 0;
-				// groupby	
-				Beneficiaries.native(function(err, collection) {
-							if (err) return res.serverError(err);
-						  
-							collection.aggregate([
-								{ 
-									$match : filterObject 
-								},
-								{
-								  $group: {
-									_id: {
-										project_id:'$project_id',
-										site_lat :'$site_lat',
-										site_lng :'$site_lng', 
-										site_name:'$site_name',
-										cluster:'$cluster',
-										organization:'$organization',
-										project_title:'$project_title',
-										admin0name:'$admin0name',
-										admin1name:'$admin1name',
-										admin2name:'$admin2name',
-										admin3name:'$admin3name',
-										admin4name:'$admin4name',
-										admin5name:'$admin5name',
-										cluster_id:'$cluster_id',
-										site_type_name:'$site_type_name',
-										site_name:'$site_name',
-										name:'$name',
-										position:'$position',
-										phone:'$phone', 
-										email:'$email'
-									}
-								  }
-								}
-							]).toArray(function (err, locations) {
-							  	if (err) return res.serverError(err);
-							
-								// return no locations
-								if ( !locations.length ) return res.json( 200, { 'data': { 'marker0': { layer: 'projects', lat:34.5, lng:66.0, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } } );
-
-								// length
-								length = locations.length;
-								// foreach location
-								locations.forEach( function( d, i ){
-
-									// popup message
-									var message = '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">' + d._id.cluster + '</h5>'
-															+ '<h5 style="text-align:center; font-size:1.3rem; font-weight:100;">' + d._id.organization + ' | ' + d._id.project_title + '</h5>'
-															+ '<div style="text-align:center">' + d._id.admin0name + '</div>'
-															if ( d._id.admin5name ) {
-																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + ', ' + d._id.admin3name + ', ' + d._id.admin4name + ', ' + d._id.admin5name + '</div>';
-															} else if ( d._id.admin4name ) {
-																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + ', ' + d._id.admin3name + ', ' + d._id.admin4name + '</div>';
-															} else if ( d._id.admin3name ) {
-																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + ', ' + d._id.admin3name + '</div>';
-															} else {
-																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + '</div>';
-															}
-															if ( d._id.site_type_name ){
-																message += '<div style="text-align:center">' + d._id.site_type_name + '</div>'
-															}
-															message += '<div style="text-align:center">' + d._id.site_name + '</div>'
-															+ '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">CONTACT</h5>'
-															+ '<div style="text-align:center">' + d._id.organization + '</div>'
-															+ '<div style="text-align:center">' + d._id.name + '</div>'
-															+ '<div style="text-align:center">' + d._id.position + '</div>'
-															+ '<div style="text-align:center">' + d._id.phone + '</div>'
-															+ '<div style="text-align:center">' + d._id.email + '</div>'
-															+ '<div align="center" style="margin-top:10px;"><a style="color:#fff;height: 30px;line-height: 30px;" class="btn" href="#/cluster/projects/summary/' + d._id.project_id +'" target="_blank">'+'Go to Project</a></div>';
-
-									// create markers
-									markers[ 'marker' + counter ] = {
-										layer: 'projects',
-										lat: d._id.site_lat,
-										lng: d._id.site_lng,
-										message: message
-									};
-
-									// plus
-									counter++;
-
-									// if last location
-									if( counter === length ){
-
-										// return markers
-										return res.json(200, { 'data': markers } );
-
-									}
-
-								});
-
-								});
-				});
-
-				break;
+			
 			
 			case 'pieChart':
 			// labels
@@ -2042,13 +1833,7 @@ var ClusterDashboardController = {
 								if (err) return res.serverError(err);								
 
 								// if no length
-								// if (!beneficiaries.length) return res.json(200, { 'value': 0 });
-								if (!beneficiaries.length) {
-									result.data[0].y = 100;
-									result.data[0].label = 0;
-									result.data[0].color = '#c7c7c7';
-									return res.json(200, result);
-								}
+								if (!beneficiaries.length) return res.json(200, { 'value': 0 });
 
 
 								$beneficiaries = beneficiaries[0];
@@ -2091,16 +1876,6 @@ var ClusterDashboardController = {
 											// assign data center
 											result.label.center.label.label = totalPerCent;
 											result.label.center.subLabel.label = $beneficiaries.childTotal;
-											if (result.label.center.subLabel.label >= 1000000 && result.label.center.subLabel.label < 1000000000) {
-												result.label.center.subLabel.label = result.label.center.subLabel.label / 1000000;
-												result.label.center.subLabel.postfix = 'M';
-												result.label.center.subLabel.fractionSize = 2;
-											}
-											if (result.label.center.subLabel.label >= 1000000000) {
-												result.label.center.subLabel.label = result.label.center.subLabel.label / 1000000000;
-												result.label.center.subLabel.postfix = 'B';
-												result.label.center.subLabel.fractionSize = 2;
-											}
 											// assign data right
 											result.label.right.label.label = girlsPerCent;
 											result.label.right.subLabel.label = $beneficiaries.girls;
@@ -2153,16 +1928,6 @@ var ClusterDashboardController = {
 											// // assign data center
 											result.label.center.label.label = totalPerCent;
 											result.label.center.subLabel.label = $beneficiaries.adultTotal;
-											if (result.label.center.subLabel.label >= 1000000 && result.label.center.subLabel.label < 1000000000) {
-												result.label.center.subLabel.label = result.label.center.subLabel.label / 1000000;
-												result.label.center.subLabel.postfix = 'M';
-												result.label.center.subLabel.fractionSize = 2;
-											}
-											if (result.label.center.subLabel.label >= 1000000000) {
-												result.label.center.subLabel.label = result.label.center.subLabel.label / 1000000000;
-												result.label.center.subLabel.postfix = 'B';
-												result.label.center.subLabel.fractionSize = 2;
-											} 
 											// // assign data right
 											result.label.right.label.label = womensPerCent;
 											result.label.right.subLabel.label = $beneficiaries.women;
@@ -2215,16 +1980,6 @@ var ClusterDashboardController = {
 											// // assign data center
 											result.label.center.label.label = totalPerCent;
 											result.label.center.subLabel.label = $beneficiaries.elderTotal;
-											if (result.label.center.subLabel.label >= 1000000 && result.label.center.subLabel.label < 1000000000) {
-												result.label.center.subLabel.label = result.label.center.subLabel.label / 1000000;
-												result.label.center.subLabel.postfix = 'M';
-												result.label.center.subLabel.fractionSize =2;
-											}
-											if (result.label.center.subLabel.label >= 1000000000) {
-												result.label.center.subLabel.label = result.label.center.subLabel.label / 1000000000;
-												result.label.center.subLabel.postfix = 'B';
-												result.label.center.subLabel.fractionSize =2;
-											}
 											// // assign data right
 											result.label.right.label.label = elwomensPerCent;
 											result.label.right.subLabel.label = $beneficiaries.elderly_women;
@@ -2251,46 +2006,1131 @@ var ClusterDashboardController = {
 							})					
 						
 										
-				break;
-			case 'activities':
+				break;*/
 
-				if (params.adminRpcode !== 'hq' && params.admin0pcode === 'all') {
-					if (params.adminRpcode === 'afro') {
-						adminRpcode_filter = { or: [{ admin0pcode: { contains: 'CD' } }, { admin0pcode: { contains: 'ET' } }, { admin0pcode: { contains: 'NG' } }, { admin0pcode: { contains: 'SS' } }] }
-					}
-					if (params.adminRpcode === 'amer') {
-						adminRpcode_filter = { admin0pcode: { contains: 'COL' } };
-					}
-					if (params.adminRpcode === 'emro') {
-						adminRpcode_filter = { or: [{ admin0pcode: { contains: 'AF' } }, { admin0pcode: { contains: 'SO' } }, { admin0pcode: { contains: 'SY' } }, { admin0pcode: { contains: 'YE' } }] }
-					}
-					if (params.adminRpcode === 'searo') {
-						adminRpcode_filter = { or: [{ admin0pcode: { contains: 'BD' } }, { admin0pcode: { contains: 'CB' } }] }
-					}
-					if (params.adminRpcode === 'euro') {
-						adminRpcode_filter = { admin0pcode: { contains: 'UA' } };
-					}
-					var filterObjectact = _.extend({}, adminRpcode_filter, filters.cluster_id_act)
-				}else{
-					var filterObjectact = _.extend({}, filters.admin0pcode_act, filters.cluster_id_act)
-				}
-				Activities
+				//4wDASHBOARDplus
+
+
+				//activities activity_type
+
+				case 'implementing_partners':
+          
+                   //console.log("FILTROS IMPLEMENTING PARERS:" ,filters);
+                   //console.log("FILTEROBJECT", filterObject );
+                 var imppartners = [];
+              
+				Beneficiaries
 					.find()
-					.where(filterObjectact)
-					.exec(function (err, activities) {
-						var distinct_activities = _.uniq(activities, function (x) {
-							return x.activity_type_name;
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.organization_tag )
+					.where( filters.beneficiaries )
+					.where( filters.cluster_id)
+					//.where( filters.donor_tag)
+					.where(filters.donor_tagBenef)
+					.where(filters.report_period_ben)
+					.exec( function( err, results ) {
+						
+						if (err) return res.serverError(err);
+
+						//var imppartners = [];
+
+
+					if(results.length){
+
+						//console.log("RESULTADOS: ",results);
+
+						results.forEach( function( d, i ) {
+
+							if(d.implementing_partners){
+
+								 d.implementing_partners.forEach(function (partner, j){
+								 	//console.log("RESULTS EN BENEF: ", partner);
+
+
+	                             const resultado = imppartners.find( implementer => implementer.organization_tag === partner.organization_tag );
+
+	                             if(!resultado){
+	                             	imppartners.push(partner);
+	                             }
+	                            
+
+								});
+
+							}
+                        
 						});
-						// return error
-						if (err) return res.negotiate(err);
-						// return project
-						return res.json(200, distinct_activities);
-					})
+
+						var partben = imppartners;
+					}
+
+					BudgetProgress
+					.find()
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.organization_tag )
+					.where( filters.beneficiaries )
+					.where( filters.cluster_id)
+					//.where( filters.donor_tag)
+					.where(filters.donor_tagBudget)
+					//.where( filters.project_startDateNative )
+					//.where( filters.project_endDateNative)
+					.where(filters.budget_date_recieved)
+					.exec( function( err, result ) {
+						
+						if (err) return res.serverError(err);
+
+						//var imppartners = [];
+
+
+					if(result.length){
+
+
+						result.forEach( function( d, i ) {
+
+							if(d.implementing_partners){
+
+								d.implementing_partners.forEach(function(partner,j){
+									if(partner){
+										const resultado = imppartners.find( implementer => implementer.organization_tag === partner.organization_tag);
+
+										if (!resultado){
+											//console.log("RESULTS en BUDGETPROGRESS: ", partner);
+											imppartners.push(partner);
+										//	console.log("PROJECT EN BUDGET: ", d.project_id);
+										}
+									}
+								})
+							}
+                        
+						});
+					  }
+					  return res.json( 200, { 'data': imppartners } );
+
+					});
+
+					
+
+				});
+
+
 				break;
+
+				//DONORS LIST
+
+				case 'project_donors':
+
+                 var donorslist = [];
+              
+				
+					Beneficiaries
+					.find()
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.organization_tag )
+					.where( filters.beneficiaries )
+					.where( filters.cluster_id)
+					.where(filters.donor_tagBenef)
+					//.where( filters.project_startDateNative )
+					//.where( filters.project_endDateNative)
+					.where(filters.report_period_ben)
+					.exec( function( err, results ) {
+						
+						if (err) return res.serverError(err);
+
+						//var imppartners = [];
+
+
+					if(results.length){
+
+
+						results.forEach( function( d, i ) {
+
+
+							if(results[i].project_donor){
+
+								 results[i].project_donor.forEach(function (d, j){
+
+
+	                             const resultado = donorslist.find( donor => donor.project_donor_id === results[i].project_donor[j].project_donor_id );
+
+	                             if(!resultado){
+	                             	donorslist.push(results[i].project_donor[j]);
+	                             }
+	                            
+
+								});
+
+							}
+                        
+						});
+					}
+
+
+					BudgetProgress
+					.find()
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.organization_tag )
+					.where( filters.beneficiaries )
+					.where( filters.cluster_id)
+					//.where( filters.donor_tag)
+					.where(filters.donor_tagBudget)
+					//.where( filters.project_startDateNative )
+					//.where( filters.project_endDateNative)
+					.where(filters.budget_date_recieved)
+					.exec( function( err, result ) {
+						
+						if (err) return res.serverError(err);
+
+						//var imppartners = [];
+
+
+					if(result.length){
+
+
+						result.forEach( function( d, i ) {
+							
+							const resultado = donorslist.find( donor => donor.project_donor_id === d.project_donor_id );
+
+			                             if(!resultado){
+
+			                             	var donortoadd = {
+			                             		'project_donor_id':d.project_donor_id,
+			                             		'project_donor_name':d.project_donor_name
+			                             	}
+			                             	donorslist.push(donortoadd);
+			                             }
+                        
+						});
+
+					  }
+					  return res.json( 200, { 'data': donorslist } );
+
+					});
+
+					
+
+				});
+
+
+				break;
+
+
+				case 'projects_4wplusdashboard':
+
+
+				//console.log("FILTERS: ",filters.project_type);
+				
+
+
+
+					total_projects = [];
+
+					 Beneficiaries.native(function(err, collection) {
+					if (err) return res.serverError(err);
+				
+					collection.aggregate([
+						{ 
+							//$match : filterObject 
+							$match: filterObjectBenef
+						},
+						{
+							$group: {
+								_id: {project_id:'$project_id'}
+							}
+						}
+
+					]).toArray(function (err, result) {
+						if (err) return res.serverError(err);
+
+						projects=_.pluck(result,'_id')		
+							projects.sort(function(a, b) {
+								if(a.project_id !== null && b.project_id !== null ){
+								
+								return a.project_id.localeCompare(b.project_id);
+							   }
+							});
+
+						projects.forEach(function(d,i){
+
+							const exist = total_projects.find(proj => proj.project_id === d.project_id);
+
+										
+										if(!exist){
+
+											total_projects.push(d);
+											//añadidos = añadidos+1;
+
+										}else{
+										}
+
+
+								});
+
+						BudgetProgress.native(function(err, collection) {
+						if (err) return res.serverError(err);
+					
+						collection.aggregate([
+							{ 
+								//$match : filterObject 
+								$match: filterObjectBudget
+							},
+							{
+							$group: {
+								_id: {project_id:'$project_id'}
+							}
+						}
+						]).toArray(function (err, resultbudg) {
+
+							if(err) return res.negotiate(err);
+
+							projectsbud=_.pluck(resultbudg,'_id')		
+							projectsbud.sort(function(a, b) {
+
+								if(a.project_id !== null && b.project_id !== null ){
+									
+									return a.project_id.localeCompare(b.project_id);
+								}
+							});
+
+
+			              	projectsbud.forEach(function(d,i){
+
+			              		const exist = total_projects.find(proj => proj.project_id === d.project_id);
+
+			              		if(!exist){
+			              			total_projects.push(d);
+			              		}else{
+			              		}
+			              	});
+				
+
+			              	return res.json(200,{'value':total_projects.length});
+
+			              });
+						
+
+
+					});
+					});
+				});
+
+				
+				break;
+
+				case 'organizations_4wplusdashboard':
+				
+
+				if ( params.list ) {
+
+					organizationList = [];
+
+					organizationList.unshift({
+											organization_tag: 'all',
+											organization: 'ALL',
+										});
+
+
+				Beneficiaries.native(function(err, collection) {
+
+					
+					if (err) return res.serverError(err);
+				
+					collection.aggregate([
+						{ 
+							//$match : filterObject 
+							$match:filterObjectBenef
+						},
+						{
+							$group: {
+								_id: {organization_tag:'$organization_tag', organization:'$organization'}
+							}
+						}
+						]).toArray(function (err, results) {
+						
+						if (err) return res.serverError(err);
+
+
+							organizations=_.pluck(results,'_id')		
+							organizations.sort(function(a, b) {
+								return a.organization.localeCompare(b.organization);
+							});
+							
+							organizations.forEach( function( d, i ) {
+
+							 		if(d.organization_tag){
+
+							 			const resultado = organizationList.find( org => org.organization_tag === d.organization_tag );
+
+							 			if(!resultado){
+
+							 				organizationList.push(d);
+
+							 			}
+								 			
+			                            
+										}
+									
+						    	});
+
+					BudgetProgress.native(function(err, collection) {
+						if (err) return res.serverError(err);
+					
+						collection.aggregate([
+							{ 
+								//$match : filterObject 
+								$match: filterObjectBudget
+							},
+							{
+								$group: {
+								_id: {organization_tag:'$organization_tag', organization:'$organization'}
+
+								}
+							}/*,
+							{
+								$group: {
+									_id: 1,
+									total: {
+									$sum: 1
+									}
+								}
+							}*/
+						]).toArray(function (err, resultsbudg) {
+
+								if (err) return res.serverError(err);
+
+
+
+						   organizationsBudget=_.pluck(resultsbudg,'_id')		
+							organizationsBudget.sort(function(a, b) {
+								return a.organization.localeCompare(b.organization);
+							});
+
+
+								   organizationsBudget.forEach( function( d, i ) {
+
+							 		if(d.organization_tag){
+
+							 			const resultado = organizationList.find( org => org.organization_tag === d.organization_tag );
+
+							 			if(!resultado){
+
+							 				organizationList.push(d);
+
+
+							 			}
+								 			
+			                            
+										}
+									
+						    	});
+                              
+                              
+
+
+							return res.json(200, organizationList);
+
+
+
+						});
+					});
+
+					});
+				});	
+
+
+
+			}else {	
+
+				resultsFiltersOrganizations = [];
+
+					Beneficiaries.native(function(err, collection) {
+						if (err) return res.serverError(err);
+					
+						collection.aggregate([
+							{ 
+								//$match : filterObject 
+								$match: filterObjectBenef
+							},
+							{
+								$group: {
+									_id: {organization_tag:'$organization_tag', organization:'$organization'}
+								}
+							}/*,
+							{
+								$group: {
+									_id: 1,
+									total: {
+									$sum: 1
+									}
+								}
+							}*/
+						]).toArray(function (err, results) {
+
+							  organizations=_.pluck(results,'_id')		
+							organizations.sort(function(a, b) {
+								return a.organization.localeCompare(b.organization);
+							});
+
+							organizations.forEach(function(d,i){
+
+								const exist = resultsFiltersOrganizations.find(orgbenef => orgbenef.organization === d.organization)
+
+								if(!exist){
+
+									resultsFiltersOrganizations.push(d);
+									
+								}
+
+							});
+
+						BudgetProgress.native(function(err, collection) {
+						if (err) return res.serverError(err);
+					
+						collection.aggregate([
+							{ 
+								//$match : filterObject 
+								$match: filterObjectBudget
+							},
+							{
+								$group: {
+									_id: {organization_tag:'$organization_tag', organization:'$organization'}
+								}
+							}/*,
+							{
+								$group: {
+									_id: 1,
+									total: {
+									$sum: 1
+									}
+								}
+							}*/
+						]).toArray(function (err, resultsBudg) {
+
+							
+
+
+							organizationsBudget=_.pluck(resultsBudg,'_id')		
+							organizationsBudget.sort(function(a, b) {
+								return a.organization.localeCompare(b.organization);
+							});
+
+
+						   organizationsBudget.forEach( function( d, i ) {
+
+							 		
+
+							 			const resultado = resultsFiltersOrganizations.find( org => org.organization === d.organization );
+
+							 			if(!resultado){
+
+							 				resultsFiltersOrganizations.push(d);
+							 		
+
+
+							 			}
+						    	});
+			
+							return res.json(200, {'value': resultsFiltersOrganizations.length});
+						});
+					});	
+				  });
+				});	
+
+
+			}
+				
+				break;
+
+				/*case 'total_donors_4wplusdashboard':
+
+
+					Beneficiaries
+					.find()
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.organization_tag )
+					.where( filters.hrp_plan)
+					.where( filters.beneficiaries )
+					.where( filters.cluster_id)
+					.where( filters.project_startDateNative )
+					.where( filters.project_endDateNative)
+					.exec( function( err, results ){
+						if (err) return res.serverError(err);
+
+						var donors = [];
+						if(results.length){
+
+								
+
+							 	results.forEach( function( d, i ) {
+
+							 		if(results[i].project_donor){
+								 			results[i].project_donor.forEach(function (d, j){
+
+
+				                             const resultado = donors.find( donante => donante.project_donor_id === results[i].project_donor[j].project_donor_id );
+
+				                             if(!resultado){
+				                             	donors.push(results[i].project_donor[j]);
+				                             }
+			                            
+										});
+
+							 		}
+									
+						    	});
+
+						}
+						return res.json(200, {'value':donors.length});
+
+
+					});
+				
+				
+				break;*/
+
+		       case 'beneficiaries_4wplusdashboard':
+
+				// total sum
+				Beneficiaries.native(function(err, collection) {
+					if (err) return res.serverError(err);
+
+				
+					collection.aggregate(
+						[
+							{ 
+							//	$match : filterObject 
+							$match: filterObjectBenef
+							},
+							{
+								$group:
+								{
+									_id: null,
+									// total:  { $sum: { $add: [ "$men", "$women","$boys","$girls","$elderly_men","$elderly_women" ] } }
+									//total:  { $sum: { $add: [ "$total_beneficiaries" ] } }
+									total: {$sum:{$add:['$total_male','$total_female']}}
+								}
+							}
+						]
+					).toArray(function (err, beneficiaries) {
+						if (err) return res.serverError(err);
+
+						var total = beneficiaries[0]?beneficiaries[0].total:0;
+
+						return res.json( 200, { 'value': total } );
+					});
+				});
+				
+				break;
+
+				case 'budgetprogress_4wplusdashboard':
+
+				BudgetProgress.find()
+					.where( filters.default )
+					.where( filters.adminRpcode )
+					.where( filters.admin0pcode )
+					.where( filters.admin1pcode )
+					.where( filters.admin2pcode )
+					.where( filters.cluster_id)
+
+					.where( filters.organization_tag )
+					.where( filters.beneficiaries )
+					//.where( filters.donor_tag)
+					.where(filters.donor_tagBudget)
+					.where(filters.budget_date_recieved)
+					.exec( function( err, budgetprogress )  {
+						if (err) return res.serverError(err);
+
+						var total_budget_progress = 0;
+
+						budgetprogress.forEach(function(budpro,i){
+
+							var bpamount = 0;
+
+							if(budpro.currency_id !== 'eur' && budpro.currency_id !== 'cop'){
+
+								bpamount = budpro.project_budget_amount_recieved;
+							}else if(budpro.currency_id ==='eur'){
+
+								bpamount = budpro.project_budget_amount_recieved * params.eurotousd;
+			
+							}else if(budpro.currency_id ==='cop'){
+
+								//console.log(" VALOR PESOS: ", budpro.project_budget_amount_recieved);
+								valuetostring=budpro.project_budget_amount_recieved.toString();
+								//console.log("EN STRING: ",Numeroaletra);
+								//nuevoNumero = Numeroaletra.indexOf('.');
+								newnumber2=valuetostring.replace(".",'');
+								//console.log("NUEVO VALOR: ",nuevoNumero2);
+								finalnumber = parseFloat(newnumber2);
+								//console.log("STRING A ENTERO: ",final);
+								
+
+								bpamount = finalnumber / params.coptousd;
+
+							
+							}
+
+
+							total_budget_progress = total_budget_progress+bpamount;
+
+						});
+
+						return res.json( 200, { 'value': total_budget_progress } );
+					});
+			
+				
+				break;
+
+
+				case 'total_implementing_partners_4wplus':
+
+				var imppartners = [];
+
+
+						Beneficiaries.native(function(err, collection) {
+					if (err) return res.serverError(err);
+				
+					collection.aggregate([
+						{ 
+							//$match : filterObject 
+							$match: filterObjectBenef
+						}
+
+					]).toArray(function (err, results) {
+						if (err) return res.serverError(err);
+
+
+					if(results.length){
+
+						results.forEach( function( d, i ) {
+								//console.log("IMPL TOTAL BENEF: ", d.project_id);
+
+
+							if(d.implementing_partners){
+
+								d.implementing_partners.forEach(function (im, j){
+
+
+	                             const resultado = imppartners.find( implementer => implementer.organization_tag === im.organization_tag );
+
+	                             if(!resultado){
+	                             	imppartners.push(im);
+	                             }
+	                            
+
+								});
+
+							}
+
+						});
+					   var partners =	imppartners;
+
+					
+				    }
+
+
+						BudgetProgress.native(function(err, collection) {
+						if (err) return res.serverError(err);
+					
+						collection.aggregate([
+							{ 
+								//$match : filterObject 
+								$match: filterObjectBudget
+							}
+						]).toArray(function (err, resultsbudg) {
+
+								if (err) return res.serverError(err);
+
+						//var imppartners = [];
+
+
+					if(resultsbudg.length){
+
+
+						resultsbudg.forEach( function( d, i ) {
+
+
+							if(d.implementing_partners){
+
+								 d.implementing_partners.forEach(function (im, j){
+
+								 const resultado = imppartners.find( implementer => implementer.organization_tag === im.organization_tag );
+
+			                             if(!resultado){
+			                             //	console.log("IMPL: ",result[i].implementing_partners[j]);
+			                             	imppartners.push(im);
+			                             	
+
+			                             }
+
+								});
+
+							}
+                        
+						});
+					  }
+					 
+					  return res.json( 200, { 'value': imppartners.length } );
+
+					});
+			
+
+
+
+					});
+					});
+
+				});
+				
+
+				break;
+
+				// count
+			case 'locations_4wplusDashboard':
+
+			 locationsTotal = [];
+
+			
+			 Beneficiaries.native(function(err, collection) {
+					if (err) return res.serverError(err);
+				
+					collection.aggregate([
+						{ 
+							//$match : filterObject 
+							$match: filterObjectBenef
+						},
+						{
+							$group: {
+								_id: {
+									project_id: '$project_id',
+									site_lat: '$site_lat',
+									site_lng: '$site_lng',
+									site_name: '$site_name'
+								}
+							}
+						}/*,
+						{
+							$group: {
+								_id: 1,
+								total: {
+								$sum: 1
+								}
+							}
+						}*/
+					]).toArray(function (err, results) {
+						if (err) return res.serverError(err);
+						//console.log(results, "RESULTADOS"); 
+
+
+
+
+						results.forEach(function(d,i){
+
+							const exist = locationsTotal.find(locat => (locat.site_lat === d.site_lat && locat.site_lng === d.site_lng));
+
+							if(!exist){
+
+								locationsTotal.push(d._id);
+							}
+
+						});
+
+
+
+				BudgetProgress.native(function(err, collection) {
+					if (err) return res.serverError(err);
+				
+					collection.aggregate([
+						{ 
+							//$match : filterObject 
+							$match: filterObjectBudget
+						},
+						{
+							$group: {
+								_id: {
+									project_id: '$project_id',
+									admin2lat: '$admin2lat',
+									admin2lng: '$admin2lng',
+									admin1name: '$admin1name',
+									admin2name: '$admin2name'
+								}
+							}
+						}/*,
+						{
+							$group: {
+								_id: 1,
+								total: {
+								$sum: 1
+								}
+							}
+						}*/
+					]).toArray(function (err, resultsLocations) {
+
+					//	console.log("RESULTADOS BUDGETPRO: ",resultsLocations);
+
+						
+
+						resultsLocations.forEach(function(d,i){
+
+							const exist = locationsTotal.find(locati => (locati.site_lat === d._id.admin2lat && locati.site_lng === d._id.admin2lng));
+
+							if(!exist){
+
+								objlocat = {
+									
+									project_id: d._id.project_id,
+									site_lat: d._id.admin2lat,
+									site_lng: d._id.admin2lng,
+								    site_name: d._id.admin2name + ', '+d._id.admin1name
+
+								};
+
+								locationsTotal.push(objlocat);
+							}
+
+						});
+
+
+				    return res.json(200, {'value': locationsTotal.length});
+
+					});
+				  });
+			    });
+		     
+		     });
+
+				
+				break;	
+
+
+				//  markers
+			case 'markers4wplusDasbhboard':
+					
+				// params
+				var locationsMarkTotal = [],
+					markers = {},
+					counter = 0,
+					length = 0;
+				// groupby	
+				Beneficiaries.native(function(err, collection) {
+							if (err) return res.serverError(err);
+						  
+							collection.aggregate([
+								{ 
+									//$match : filterObject 
+									$match: filterObjectBenef
+								},
+								{
+								  $group: {
+									_id: {
+										project_id:'$project_id',
+										site_lat :'$site_lat',
+										site_lng :'$site_lng', 
+										site_name:'$site_name',
+										cluster:'$cluster',
+										organization:'$organization',
+										plan_component: '$plan_component',
+										project_title:'$project_title',
+										admin0name:'$admin0name',
+										admin1name:'$admin1name',
+										admin2name:'$admin2name',
+										admin3name:'$admin3name',
+										admin4name:'$admin4name',
+										admin5name:'$admin5name',
+										cluster_id:'$cluster_id',
+										site_type_name:'$site_type_name',
+										site_name:'$site_name',
+										name:'$name',
+										position:'$position',
+										phone:'$phone', 
+										email:'$email'
+									}
+								  }
+								}
+							]).toArray(function (err, results) {
+							  	if (err) return res.serverError(err);
+
+
+							  	results.forEach(function(d,i){
+
+							const exist = locationsMarkTotal.find(locat => (locat._id.site_lat === d.site_lat && locat._id.site_lng === d.site_lng));
+
+							if(!exist){
+
+								locationsMarkTotal.push(d);
+							}
+
+						});
+
+
+
+					BudgetProgress.native(function(err, collection) {
+
+							if (err) return res.serverError(err);
+						
+							collection.aggregate([
+								{ 
+									//$match : filterObject 
+									$match: filterObjectBudget
+								},
+								{
+									$group: {
+										_id: {
+											project_id: '$project_id',
+											admin2lat: '$admin2lat',
+											admin2lng: '$admin2lng',
+											admin1name: '$admin1name',
+											admin2name: '$admin2name',
+											cluster:'$cluster',
+												organization:'$organization',
+												plan_component: '$plan_component',
+												project_title:'$project_title',
+												admin0name:'$admin0name',
+												admin3name:'$admin3name',
+												admin4name:'$admin4name',
+												admin5name:'$admin5name',
+												cluster_id:'$cluster_id',
+												site_type_name:'$site_type_name',
+												name:'$name',
+												position:'$position',
+												phone:'$phone', 
+												email:'$email'
+										}
+									}
+								}/*,
+								{
+									$group: {
+										_id: 1,
+										total: {
+										$sum: 1
+										}
+									}
+								}*/
+							]).toArray( function (err, resultsLocations) {
+
+							   resultsLocations.forEach(function(d,i){
+	 
+								const exist = locationsMarkTotal.find(locati => (locati._id.site_lat === d._id.admin2lat && locati._id.site_lng === d._id.admin2lng));
+
+								if(!exist){
+
+
+									d._id = {
+										
+										project_id: d._id.project_id,
+										site_lat: d._id.admin2lat,
+										site_lng: d._id.admin2lng,
+									    site_name: d._id.admin2name + ', '+d._id.admin1name,
+										admin1name: d._id.admin1name,
+										admin2name: d._id.admin2name,
+										cluster: d._id.cluster,
+											organization: d._id.organization,
+											plan_component: d._id.plan_component,
+											project_title: d._id.project_title,
+											admin0name: d._id.admin0name,
+											admin3name: d._id.admin3name,
+											admin4name: d._id.admin4name,
+											admin5name: d._id.admin5name,
+											cluster_id: d._id.cluster_id,
+											site_type_name: "Múltiples Sitios",
+											name: d._id.name,
+											position:d._id.position,
+											phone:d._id.phone, 
+											email: d._id.email
+
+									};
+
+									locationsMarkTotal.push(d);
+								}
+
+						    	});
+
+
+					    	 // return no locations
+								if ( !locationsMarkTotal.length ) return res.json( 200, { 'data': { 'marker0': { layer: 'projects', lat:4.5973254, lng:-74.0759398, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } } );
+
+								// length
+								length = locationsMarkTotal.length;
+
+								// foreach location
+								locationsMarkTotal.forEach( function( d, i ){
+
+									// popup message
+									var message = '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">' + d._id.cluster + '</h5>'
+															+ '<h5 style="text-align:center; font-size:1.3rem; font-weight:100;">' + d._id.organization + ' | ' + d._id.project_title + '</h5>'
+															+ '<div style="text-align:center">' + d._id.admin0name + '</div>'
+															if ( d._id.admin5name ) {
+																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + ', ' + d._id.admin3name + ', ' + d._id.admin4name + ', ' + d._id.admin5name + '</div>';
+															} else if ( d._id.admin4name ) {
+																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + ', ' + d._id.admin3name + ', ' + d._id.admin4name + '</div>';
+															} else if ( d._id.admin3name ) {
+																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + ', ' + d._id.admin3name + '</div>';
+															} else {
+																message += '<div style="text-align:center">' + d._id.admin1name + ', ' + d._id.admin2name + '</div>';
+															}
+															if ( d._id.site_type_name ){
+																message += '<div style="text-align:center">' + d._id.site_type_name + '</div>'
+															}
+															message += '<div style="text-align:center">' + d._id.site_name + '</div>'
+															+ '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">CONTACT</h5>'
+															+ '<div style="text-align:center">' + d._id.organization + '</div>'
+															+ '<div style="text-align:center">' + d._id.name + '</div>'
+															+ '<div style="text-align:center">' + d._id.position + '</div>'
+															+ '<div style="text-align:center">' + d._id.phone + '</div>'
+															+ '<div style="text-align:center">' + d._id.email + '</div>';
+
+											
+									// create markers
+									markers[ 'marker' + counter ] = {
+										layer: 'projects',
+										lat: d._id.site_lat,
+										lng: d._id.site_lng,
+										message: message
+									};
+
+									// plus 
+									counter++;
+
+									// if last location
+									if( counter === length ){
+
+										// return markers
+										return res.json(200, { 'data': markers } );
+
+									}
+
+								});
+							});
+                      }); // close BudgetProgress
+                    }); 
+                 }); //close beneficiaries
+
+				        
+				      
+                break;
+				
 				default: 
+
 					return res.json( 200, { value:0 });
 					break;
-
 
 		}
 
@@ -2299,4 +3139,4 @@ var ClusterDashboardController = {
 
 };
 
-module.exports = ClusterDashboardController;
+module.exports = Cluster4wplusDashboardController;

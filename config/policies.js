@@ -102,8 +102,20 @@ module.exports.policies = {
     '*': true
   },
 
+  //Public function to 4wPlus COL getProjectsColAPC in ProjectController
+
+  'Cluster/ProjectController': {
+    'getProjectsColAPC': true
+    //'*': true
+  },
+
    // public
   'Cluster/Dashboards/Cluster4wprojectplanDashboardController': { 
+    '*': true
+  },
+
+  //public
+  'Cluster/Dashboards/Cluster4wplusDashboardController':{
     '*': true
   },
 
