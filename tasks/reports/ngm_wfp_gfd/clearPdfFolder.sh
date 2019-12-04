@@ -1,7 +1,7 @@
-﻿#!/bin/bash
+#!/bin/bash
 ##################################################
-# ReportHub open reports email
+# ReportHub set WFP GFD to actual
 # Steps
 #		- run API
 ##################################################
-curl https://reporthub.org/api/cluster/report/setReportsOpen
+rm -r /home/ubuntu/nginx/www/ngm-reportPrint/pdf/*distribution*

@@ -311,28 +311,28 @@ var GfaDashboardController = {
 
 				case 'family_size_1_3':
 					filter = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 0 && b.total_beneficiaries <= 3;
+						return b.gfd_family_size >= 1 && b.gfd_family_size <= 3;
 					});
 					value = { 'value': filter.length };
 					break;
 
 				case 'family_size_4_7':
 					filter = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 4 && b.total_beneficiaries <= 7;
+						return b.gfd_family_size >= 4 && b.gfd_family_size <= 7;
 					});
 					value = { 'value': filter.length };
 					break;
 
 				case 'family_size_8_10':
 					filter = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 8 && b.total_beneficiaries <= 10;
+						return b.gfd_family_size >= 8 && b.gfd_family_size <= 10;
 					});
 					value = { 'value': filter.length };
 					break;
 
 				case 'family_size_11+':
 					filter = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 11;
+						return b.gfd_family_size >= 11;
 					});
 					value = { 'value': filter.length };
 					break;
@@ -498,16 +498,16 @@ var GfaDashboardController = {
 				case 'family_size_chart':
 					
 					var family_size_1_3 = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 0 && b.total_beneficiaries <= 3;
+						return b.gfd_family_size >= 0 && b.gfd_family_size <= 3;
 					});
 					var family_size_4_7 = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 4 && b.total_beneficiaries <= 7;
+						return b.gfd_family_size >= 4 && b.gfd_family_size <= 7;
 					});
 					var family_size_8_10 = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 8 && b.total_beneficiaries <= 10;
+						return b.gfd_family_size >= 8 && b.gfd_family_size <= 10;
 					});
 					var family_size_11 = _.filter( beneficiaries, function ( b ) {
-						return b.total_beneficiaries >= 11;
+						return b.gfd_family_size >= 11;
 					});
 					value = { 
 						data: [
@@ -535,170 +535,114 @@ var GfaDashboardController = {
 			// indicator
 			switch ( params.indicator ) {
 
-				case 'print_distribution_pdf':
+				case 'print_distribution_zip':
 
-					// html
-					var page_html_start,
-							page_html_body,
-							page_html_end,
-							report = params.organization_tag + '_' + params.site_id + '_' + moment().unix();
+					// folder
+					var dir = '/home/ubuntu/nginx/www/ngm-reportPrint/pdf/';
+					var folder = params.organization_tag + '_round_' + params.report_round + '_distribution_' + params.report_distribution + '_' + moment().unix();
+					
+					// run curl command
+					fs.mkdir( dir + folder, { recursive: true }, function( err ) {
+						// err
+						if (err) throw err;
 
-					// make template
-					var template = '/home/ubuntu/data/html/template/' + report + '.html';
+						// get form details
+						GfdForms
+						 .find()
+						 .where( filters.organization_tag )
+						 .where({ report_round: params.report_round })
+						 .exec( function( err, forms ){
 
-					// sort
-					distribution_list = _.sortBy( beneficiaries, 'sl_number' );
+								// return error
+								if ( err ) return res.negotiate( err );
 
-					// get form details
-					GfdForms
-					 .findOne()
-					 .where( filters.site_id )
-					 .where({ report_round: params.report_round })
-					 .exec( function( err, form ){
+								// distribution_list by site_id 
+								var distribution_list = _.groupBy( beneficiaries, 'site_id' );
 
-							// return error
-							if ( err ) return res.negotiate( err );
+								// get length
+								var forms_count = 0;
+								var forms_length = forms.length;
 
-							// title
-							var header_1 = 'Master Roll - ' + form.form_title.replace(', Absent Beneficiaries', '' ) + ', Distribution ' + params.report_distribution;
-							var header_2 = 'Distribution Date: ' + moment( params.end_date ).format( 'MMMM Do YYYY' );
-							var footer = 'Funded by the World Food Programme (WFP)';
+								// build template
+								doDistributionPoint( forms_count, forms_length, forms[ forms_count ], distribution_list[ forms[ forms_count ].site_id ] );
 
-							// html content
-							page_html_start = '' +
-								'<!DOCTYPE html>' +
-								'<html lang="en">' +
-									'<head>' +
-										'<title>WFP GFD Distribution List</title>' +
-										'<meta http-equiv="content-type" content="text/html; charset=UTF-8">' +
-										'<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
-										'<style type="text/css" media="all">' +
-											'html {' +
-												'margin: 0;' +
-												'zoom: 1;' +
-											'}' +
-										'</style>' +
-									'</head>' +
-									'<style>' +
-											'table {' +
-												'font-family: verdana, arial, sans-serif;' +
-												'color: #333333;' +
-												'border-width: 1px;' +
-												'border-color: #3A3A3A;' +
-												'border-collapse: collapse;' +
-											'}' +
-											'table th {' +
-												'border-width: 1px;' +
-												'font-size: 10px;' +
-												'padding: 4px;' +
-												'border-style: solid;' +
-												'border-color: #517994;' +
-												'background-color: #B2CFD8;' +
-											'}' +
-											'table td {' +
-												'border-width: 1px;' +
-												'font-size: 9px;' +
-												'padding: 4px;' +
-												'border-style: solid;' +
-												'border-color: #517994;' +
-												'background-color: #ffffff;' +
-											'}' +
-									'</style>' +
-									'<body>';
+								// do template
+								function doDistributionPoint( forms_count, forms_length, form, distribution_plan ){
 
-							// theader
-							page_html_body = '' +
-									'<table style="width:100%">' +
-										'<thead>' +
-											'<tr>' +
-												'<th>SL#</th>' +
-												'<th>FCN</th>' +
-												'<th>Scope</th>' +
-												'<th>HH Name</th>' +
-												'<th>Location</th>' +
-												'<th>Family Size</th>' +
-												'<th>Thumb</th>' +
-											'</tr>' +
-										'</thead>' +
-										'<tbody>';
+									// group by date
+									var distribution_dates = _.groupBy( _.sortBy( distribution_plan, 'distribution_date' ), 'distribution_date' );
 
-							// foreach record
-							for( i=0; i < distribution_list.length; i++ ){
-								
-								// check if /10
-								if ( i !== 0 && i % 10 === 0 ) {
-									page_html_body += '' +
-									'</tbody>' +
-								'</table>' +
-										'<div style="page-break-before: always;"></div>' +
-										// theader
-											'<table style="width:100%">' +
-												'<thead>' +
-													'<tr>' +
-														'<th>SL#</th>' +
-														'<th>FCN</th>' +
-														'<th>Scope</th>' +
-														'<th>HH Name</th>' +
-														'<th>Location</th>' +
-														'<th>Family Size</th>' +
-														'<th>Thumb</th>' +
-													'</tr>' +
-												'</thead>' +
-												'<tbody>';
-								}
+									// distribution_dates
+									var dates_count = 0;
+									var dates_keys = Object.keys( distribution_dates );
+									var dates_length = Object.keys( distribution_dates ).length;
 
-								page_html_body += '' +
-										'<tr>' +
-											'<td>' + distribution_list[ i ].sl_number  + '</td>' +
-											'<td>' + distribution_list[ i ].fcn_id + '</td>' +
-											'<td>' + distribution_list[ i ].scope_id + '</td>' +
-											'<td>' + distribution_list[ i ].hh_name + '</td>' +
-											'<td>' + distribution_list[ i ].admin4name + '</td>' +
-											'<td align="center">' + distribution_list[ i ].gfd_family_size + '</td>' +
-											'<td width="25%" height="55px;"></td>' +
-										'</tr>';
-							}
+									// run PDF function
+									doDistributionDate( params, form, dates_keys[ dates_count ], distribution_dates );
 
-								// end
-								page_html_body += '' +
-									'</tbody>' +
-								'</table>' +
-							'</body>';
+									// loop each date to allow for PDF generation
+									function doDistributionDate( params, form, date_key, distribution_dates ) {
 
-							// html page end
-							page_html_end = '' +
-							'</html>';
+										// html
+										var template = GfaDashboardController.getDistributionPlanHtmlTemplate( params, form, date_key, distribution_dates );
 
-							// fs write template
-							fs.writeFile( template, page_html_start + page_html_body + page_html_end, function( err ) {
+										// fs write template
+										fs.writeFile( template.dir + template.report + '.html', template.html, function( err ) {
+											// err
+											if( err ) return res.json( 400, { error: 'HTML Template error!', details: err  } );
+											
+											// import updated form
+											var cmd = 'phantomjs /home/ubuntu/nginx/www/ngm-reportPrint/ngm-wfp-gfd.js "' + template.header_1 + '" "' + template.header_2 + '" "' + template.footer + '" ' + template.dir + template.report + '.html ' + dir + folder + '/' + template.report + '.pdf';
 
-								// err
-								if( err ) {
-									res.json( 400, { error: 'HTML Template error!', details: error  } );
-								}
+											// run curl command
+											EXEC( cmd, { maxBuffer: 1024 * 20480 }, function( error, stdout, stderr ) {
+												// err
+												if ( error ) {
+													// return error
+													res.json( 400, { error: 'PDF error!', details: error  } );
+												} else {
+													
+													// delete template
+													fs.unlink( template.dir + template.report + '.html', function ( err ) {
+														// err
+														if ( err ) throw err;
 
-								// import updated form
-								var cmd = 'phantomjs /home/ubuntu/nginx/www/ngm-reportPrint/ngm-wfp-gfd.js "' + header_1 + '" "' + header_2 + '" "' + footer + '" ' + template + ' /home/ubuntu/nginx/www/ngm-reportPrint/pdf/' + report + '.pdf';
+														// generate master list pdf completed
+														dates_count++;
+														if ( dates_count === dates_length ) {
+															forms_count++;
+															if ( forms_count === forms_length ) {
+																// zip
+																var zip_cmd = 'cd /home/ubuntu/nginx/www/ngm-reportPrint/pdf; zip -r ' + folder + '.zip ' + folder;
+																// run curl command
+																EXEC( zip_cmd, { maxBuffer: 1024 * 1024 }, function( error, stdout, stderr ) {
+																	// err
+																	if ( error ) return res.json( 400, { error: 'ZIP error!', details: error  } );
+																		// success
+																		return res.json( 200, { report: folder + '.zip' });
+																});
+															} else {
+																doDistributionPoint( forms_count, forms_length, forms[ forms_count ], distribution_list[ forms[ forms_count ].site_id ] );
+															}
+														} else {
+															doDistributionDate( params, form, dates_keys[ dates_count ], distribution_dates );
+														}
 
-								// run curl command
-								EXEC( cmd, { maxBuffer: 1024 * 16384 }, function( error, stdout, stderr ) {
-									// err
-									if ( error ) {
-										// return error
-										res.json( 400, { error: 'PDF error!', details: error  } );
-									} else {
-										// delete template
-										fs.unlink( template, function ( err ) {
-											if ( err ) throw err;
-											// success
-											return res.json( 200, { report: report + '.pdf' });
+													});
+												
+												}
+											
+											});
+
 										});
+									
 									}
-								});
 
-							});
+								}
 
-					 });
+						});
+
+					});
 
 					break;
 
@@ -750,12 +694,16 @@ var GfaDashboardController = {
 
 					// fields 
 					var fields = [
+						'distribution_date',
 						'organization',
 						'report_distribution',
 						'site_name',
+						'admin1name',
+						'admin2name',
 						'admin3name',
 						'admin4name',
 						'admin5name',
+						'majhee_name',
 						'family_1_to_3',
 						'family_4_to_7',
 						'family_8_to_10',
@@ -768,10 +716,35 @@ var GfaDashboardController = {
 						'site_lng',
 						'site_lat',
 					];
+
+					// fieldNames
+					var fieldNames = [
+						'Date (YYYY-MM-DD)',
+						'Implementing Partner',
+						'Distribution',
+						'Distribution Point',
+						'Upazilla',
+						'Union',
+						'Camp',
+						'Block',
+						'Sub Block',
+						'Majhee Name',
+						'1 to 3',
+						'4 to 7',
+						'8 to 10',
+						'11+',
+						'HH Total',
+						'Rice',
+						'Lentils',
+						'Oil',
+						'Total',
+						'site_lng',
+						'site_lat',
+					];
 												
 					// food distribution plan
-					var filter = [];
-					planned_beneficiaries.reduce( function( res, value ) {
+					var data = [];
+					beneficiaries.reduce( function( res, value ) {
 						// group by organization_tag + admin5pcode + distribution_date
 						var id = value.organization_tag + '_' + value.admin5pcode + ' ' + value.distribution_date;
 						if ( !res[ id ] ) {
@@ -781,7 +754,7 @@ var GfaDashboardController = {
 							res[ id ][ 'family_8_to_10' ] = 0;
 							res[ id ][ 'family_11+' ] = 0;
 							res[ id ][ 'hh_total' ] = 0;
-							filter.push( res[ id ] );
+							data.push( res[ id ] );
 						} else {
 							// tally (initial values set with res[ id ] = value )
 							res[ id ].rice += value.rice;
@@ -809,8 +782,17 @@ var GfaDashboardController = {
 						return res;
 					}, {});
 
+					// order by least important to most important
+					var filter = _.chain( data )
+						.sortBy( 'admin5name' )
+						.sortBy( 'admin4name' )
+						.sortBy( 'admin3name' )
+						.sortBy( 'distribution_date' )
+						.sortBy( 'organization' )
+						.value();
+
 					// return csv
-					json2csv({ data: filter, fields: fields, fieldNames: fields }, function( err, csv ) {
+					json2csv({ data: filter, fields: fields, fieldNames: fieldNames }, function( err, csv ) {
 
 						// error
 						if ( err ) return res.negotiate( err );
@@ -825,7 +807,25 @@ var GfaDashboardController = {
 
 					break;
 
-				case 'downloads_planned_beneficiaries':
+				case 'downloads_absent_beneficiaries':
+
+					// return csv
+					json2csv({ data: beneficiaries }, function( err, csv ) {
+
+						// error
+						if ( err ) return res.negotiate( err );
+
+						// success
+						value = { data: csv };
+
+						// return
+						return res.json( 200, value );
+
+					});
+
+					break;
+
+				case 'downloads_beneficiaries':
 
 					// return csv
 					json2csv({ data: beneficiaries }, function( err, csv ) {
@@ -862,6 +862,252 @@ var GfaDashboardController = {
 			}
 
 		}
+
+	},
+
+	// return html template for distribution master list
+	getDistributionPlanHtmlTemplate: function( params, form, date_key, distribution_dates ) {
+
+		// html content
+		var page_html_start = '';
+		var page_html_body = '';
+
+		// template object
+		var template = {
+			dir: '/home/ubuntu/data/html/template/',
+			report: params.organization_tag + '_' + form.site_id + '_' + params.report_round + '_' + params.report_distribution + '_' + date_key + '_master_list',
+			header_1: 'Master Roll for GFD Point: ' + form.site_name + ', Round ' + form.report_round + ', Distribution ' + params.report_distribution,
+			header_2: 'Distribution Date: ' + moment( date_key ).format( 'MMMM Do YYYY' ),
+			footer: 'Funded by the World Food Programme (WFP)'
+		}
+
+		// headers
+		page_html_start = '<!DOCTYPE html>' +
+			'<html lang="en">' +
+				'<head>' +
+					'<title>WFP GFD Distribution List</title>' +
+					'<meta http-equiv="content-type" content="text/html; charset=UTF-8">' +
+					'<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+					'<style type="text/css" media="all">' +
+						'html {' +
+							'margin: 0;' +
+							'zoom: 1;' +
+						'}' +
+					'</style>' +
+				'</head>' +
+				'<style>' +
+						'table {' +
+							'width: 100%' +
+							'font-family: verdana, arial, sans-serif;' +
+							'color: #333333;' +
+							'border-width: 1px;' +
+							'border-color: #3A3A3A;' +
+							'border-collapse: collapse;' +
+						'}' +
+						'table th {' +
+							'border-width: 1px;' +
+							'font-size: 7px;' +
+							'padding: 2px;' +
+							'border-style: solid;' +
+							'border-color: #517994;' +
+							'background-color: #B2CFD8;' +
+						'}' +
+						'table td {' +
+							'border-width: 1px;' +
+							'font-size: 7px;' +
+							'padding: 2px;' +
+							'border-style: solid;' +
+							'border-color: #517994;' +
+							'background-color: #ffffff;' +
+						'}' +
+				'</style>' +
+				'<body>';
+
+
+		// order by least important to most important
+		var distribution = _.chain( distribution_dates[ date_key ] )
+												.sortBy( 'gfd_id' )
+												.sortBy( 'gfd_family_size' )
+												.value();
+
+		// foreach record
+		var sub_header = 'Family Size 1 to 3';
+		var family_4_to_7 = true;
+		var family_8_to_10 = true;
+		var family_11_plus = true;
+		var beneficiary_page_count = 1;
+		var beneficiary_page_length = 15;
+
+		// for each record
+		for( i=0; i < distribution.length; i++ ){
+
+			// gfd entitlement
+			var gfd_entitlement = 'Rice: 30kg<br/>Pulse: 9kg<br/>Oil: 3L';
+
+			// true / false
+			var page_break = ( beneficiary_page_count > beneficiary_page_length ) || 
+						family_4_to_7 && distribution[ i ].gfd_family_size >= 4 || 
+						family_8_to_10 && distribution[ i ].gfd_family_size >= 8 || 
+						family_11_plus && distribution[ i ].gfd_family_size >= 11;
+
+			// round 1
+			if ( distribution[ i ].report_round === '1' ) {
+				if ( distribution[ i ].gfd_family_size <= 10  ) {
+					// gfd_entitlement
+					gfd_entitlement = 'Rice: 30kg<br/>Pulse: 9kg<br/>Oil: 3L';
+				} else {
+					// gfd_entitlement
+					gfd_entitlement = 'Rice: 60kg<br/>Pulse: 18kg<br/>Oil: 6L';
+				}
+			}
+
+			// round 2
+			if ( distribution[ i ].report_round === '2' ) {
+				if ( distribution[ i ].gfd_family_size >= 1 && distribution[ i ].gfd_family_size <= 3 ) {
+					// gfd_entitlement
+					gfd_entitlement = 'Rice: 30kg<br/>Pulse: 9kg<br/>Oil: 3L';
+				}
+				if ( distribution[ i ].gfd_family_size >= 4 && distribution[ i ].gfd_family_size <= 7 ) {
+					// gfd_entitlement
+					gfd_entitlement = 'Rice: 30kg<br/>Pulse: 9kg<br/>Oil: 3L';
+				}
+				if ( distribution[ i ].gfd_family_size >= 8 && distribution[ i ].gfd_family_size <= 10 ) {
+					// gfd_entitlement
+					gfd_entitlement = 'Rice: 60kg<br/>Pulse: 18kg<br/>Oil: 6L';
+				}
+				if ( distribution[ i ].gfd_family_size >= 11 ) {
+					// gfd_entitlement
+					gfd_entitlement = 'Rice: 60kg<br/>Pulse: 18kg<br/>Oil: 6L';
+				}
+			}
+			
+			// check if first page / page break required
+			if ( i === 0 || page_break ) {
+
+				// page break for family_4_to_7
+				if ( distribution[ i ].gfd_family_size >= 4 ) {
+					family_4_to_7 = false;
+					sub_header = 'Family Size 4 to 7';
+				
+				}
+
+				// page break for family_8_to_10
+				if ( distribution[ i ].gfd_family_size >= 8 ) {
+					family_8_to_10 = false;
+					sub_header = 'Family Size 8 to 10';
+				
+				}
+
+				// page break for family_11_plus
+				if ( distribution[ i ].gfd_family_size >= 11 ) {
+					family_11_plus = false;
+					sub_header = 'Family Size 11+';
+				
+				}
+
+				// reset / page break
+				if (  i !== 0 && page_break ) {
+					// set 
+					beneficiary_page_count = 1;
+					
+					// end
+					page_html_body += '</tbody></table>';
+					
+					// approval content
+					page_html_body += '' +
+						'<table style="width: 100%; border-width: 0px; font-family: verdana, arial, sans-serif; font-size: 8px; color: #333333; margin: 10px 0px 0px 0px;">' +
+							'<td style="width: 25%; border-width: 0px;" align="left">' +
+								'Prepared by:' +
+							"</td>" +
+							'<td style="width: 25%; border-width: 0px;" align="left">' +
+								'Checked by:' +
+							"</td>" +
+							'<td style="width: 25%; border-width: 0px;" align="left">' +
+								'Approved by:' +
+							"</td>" +
+						'</table>';
+
+					// page break
+					page_html_body += '<div style="page-break-before: always;"></div>';
+				}
+
+				// page header
+				page_html_body += '' +
+					'<table style="border-width: 0px;">' +
+						'<td width="20%" style="border-width: 0px; margin-top:-10px;">' +
+							'<img src="https://reporthub.org/desk/images/logo/wfp-logo-standard-blue-en.png" width="90%" />' +
+						'</td>' +
+						'<td align="center" style="border-width: 0px;">' +
+							'<h3 style="font-family: verdana, arial, sans-serif; font-size: 9px; padding-top:12px; margin:0px; font-weight: 300;">' + template.header_1 + '</h3>' +
+							'<h3 style="font-family: verdana, arial, sans-serif; font-size: 9px; padding-top:6px; margin:0px; font-weight: 300;">' + sub_header + '</h3>' +
+							'<h3 style="font-family: verdana, arial, sans-serif; font-size: 8px; padding-top:6px; margin:0px 0px 10px 0px; color: #616161; font-weight: 300;">' + template.header_2 + '</h3>' +
+						'</td>' +
+						'<td align="right" style="border-width: 0px;">' +
+							'<img src="https://reporthub.org/desk/images/logo/' + params.organization_tag + '-logo.png" width="40%" />' +
+						'</td>' +
+					'</table>';	
+				
+				// theader
+				page_html_body += '' +
+					'<table style="width:100%">' +
+					'<thead>' +
+						'<tr>' +
+							'<th>SL#</th>' +
+							'<th>HH Number</th>' +
+							'<th>FCN</th>' +
+							'<th>Scope</th>' +
+							'<th>HH Name</th>' +
+							'<th>Family Size</th>' +
+							'<th>GFD</th>' +
+							'<th>Thumb</th>' +
+						'</tr>' +
+					'</thead>' +
+					'<tbody>';
+			}
+
+			// content
+			page_html_body += '' +
+				'<tr>' +
+					'<td>' + distribution[ i ].sl_number  + '</td>' +
+					'<td>' + distribution[ i ].gfd_id + '</td>' +
+					'<td>' + distribution[ i ].fcn_id + '</td>' +
+					'<td>' + distribution[ i ].scope_id + '</td>' +
+					'<td>' + distribution[ i ].hh_name + '</td>' +
+					'<td align="center">' + distribution[ i ].gfd_family_size + '</td>' +
+					'<td>' + gfd_entitlement + '</td>' +
+					'<td width="25%" height="40px;"></td>' +
+				'</tr>';
+			
+			// ++
+			beneficiary_page_count++;
+
+		}
+
+		// end
+		page_html_body += '</tbody></table>';
+		
+		// approval content
+		page_html_body += '' +
+			'<table style="width: 100%; border-width: 0px; font-family: verdana, arial, sans-serif; font-size: 8px; color: #333333; margin: 10px 0px 0px 0px;">' +
+				'<td style="width: 25%; border-width: 0px;" align="left">' +
+					'Prepared by:' +
+				"</td>" +
+				'<td style="width: 25%; border-width: 0px;" align="left">' +
+					'Checked by:' +
+				"</td>" +
+				'<td style="width: 25%; border-width: 0px;" align="left">' +
+					'Approved by:' +
+				"</td>" +
+			'</table>';
+
+		// end
+		page_html_body += '</tbody></table></body></html>';
+
+		// set html
+		template.html = page_html_start + page_html_body; 
+
+		// return
+		return template;
 
 	}
 
