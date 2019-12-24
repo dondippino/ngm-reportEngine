@@ -443,6 +443,46 @@ module.exports = {
 			type: 'integer',
 			defaultsTo: 0
 		},
+		male_teachers:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		female_teachers:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		avg_attendance_boys:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		avg_attendance_girls:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		boys_6_12:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		boys_13_17:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		youth_male_18_24:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		girls_6_12:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		girls_13_17:{
+			type: 'integer',
+			defaultsTo: 0
+		},
+		youth_female_18_24:{
+			type: 'integer',
+			defaultsTo: 0
+		},
 		total_male:{
 			type: 'integer',
 			defaultsTo: 0
