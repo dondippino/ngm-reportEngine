@@ -1414,7 +1414,7 @@ var Cluster4wprojectplanDashboardController = {
 
 
 
-										if(projrecord.implementing_partners.length > 0){
+										if(projrecord.implementing_partners && projrecord.implementing_partners.length > 0){
 
 
 
@@ -1573,7 +1573,7 @@ var Cluster4wprojectplanDashboardController = {
 
 
 
-										if(projrecord.implementing_partners.length > 0){
+										if(projrecord.implementing_partners && projrecord.implementing_partners.length > 0){
 
 
 
@@ -1724,12 +1724,15 @@ var Cluster4wprojectplanDashboardController = {
 									}
 								  }
 								}
-							]).toArray(function (err, targetlocations) {
+							]).toArray(async function (err, targetlocations) {
 							  	if (err) return res.serverError(err);
-							
-								// return no locations
-								if ( !targetlocations.length ) return res.json( 200, { 'data': { 'marker0': { layer: 'projects', lat:4.5973254, lng:-74.0759398, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } } );
 
+								// return no locations
+								if ( !targetlocations.length ) {
+                  coordinates = await AreaCentroidService.getAreaCentroid(filterObject);
+                  return res.json(200, { 'data': { 'marker0': { layer: 'projects', lat: coordinates.lat, lng: coordinates.lng, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } });
+                  // return res.json( 200, { 'data': { 'marker0': { layer: 'projects', lat:4.5973254, lng:-74.0759398, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } } );
+                }
 								// length
 								length = targetlocations.length;
 								// foreach location
@@ -3323,7 +3326,8 @@ var Cluster4wprojectplanDashboardController = {
 																'y':parseFloat(clus.TOTALBUDGET),
 																'color':'blue',
 																'name': clus.cluster+' ('+clus.project_budget_currency+')',
-																'label': (clus.TOTALBUDGET / (totalFinancialFinalCluster))*100
+																'label': (clus.TOTALBUDGET / (totalFinancialFinalCluster))*100,
+																'drilldown': clus.cluster
 															};
 
 
@@ -3757,25 +3761,64 @@ var Cluster4wprojectplanDashboardController = {
 									budgetsprogress.forEach(function(budgprog){
 
 
+										if(typeof budgprog.project_budget === 'string'){
+													var stringtonum = parseFloat(budgprog.project_budget);
 
-									         	if(budgprog.project_budget_currency === 'cop'){
+													console.log("ES STRING select ADMIN1PCODE !!");
+										            	
 
-
-														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (budgprog.project_budget/params.coptousd);
-
-
-													}else if(budgprog.project_budget_currency === 'eur'){
-
-
-														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (budgprog.project_budget*params.eurotousd);
-														
-													
-
-													}else{
+										            if(stringtonum){
 
 
-														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple+budgprog.project_budget;
-													}
+
+											         	if(budgprog.project_budget_currency === 'cop'){
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (stringtonum/params.coptousd);
+
+
+															}else if(budgprog.project_budget_currency === 'eur'){
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (stringtonum*params.eurotousd);
+																
+															
+
+															}else{
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + stringtonum;
+															}
+
+											    	}
+											    	else{
+
+											    		totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + 0;
+
+											    	}
+										}else{
+
+											if(budgprog.project_budget_currency === 'cop'){
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (budgprog.project_budget/params.coptousd);
+
+
+															}else if(budgprog.project_budget_currency === 'eur'){
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (budgprog.project_budget*params.eurotousd);
+																
+															
+
+															}else{
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + budgprog.project_budget;
+															}
+
+
+										}
 									   
 
 
@@ -3912,7 +3955,7 @@ var Cluster4wprojectplanDashboardController = {
 												var neworgimplefinancial = {
 													'y': parseFloat(orgimplementer.TOTALBUDGET),
 													'color':'blue',
-													'name': orgimplementer_name+' ('+orgimplementer.project_budget_currency+')',
+													'name': orgimplementer.organization+' ('+orgimplementer.project_budget_currency+')',
 													'label': (orgimplementer.TOTALBUDGET / (totalFinancialFinalOrgImple))*100
 												};
 
@@ -4013,25 +4056,62 @@ var Cluster4wprojectplanDashboardController = {
 
 											if(targloc.length){
 
+												if(typeof budgprog.project_budget === 'string'){
+													var stringtonum = parseFloat(budgprog.project_budget);
+
+													console.log("ES STRING select ADMIN1PCODE !!");
+										            	
+
+										            if(stringtonum){
+
+
+															if(project.project_budget_currency === 'cop'){
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget/params.coptousd);
+
+
+															}else if(project.project_budget_currency === 'eur'){
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget*params.eurotousd);
+																
+															
+
+															}else{
+
+
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget);
+															}
+
+													}else{
+
+														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + 0;
+
+
+													}
+											}else{
 
 												if(project.project_budget_currency === 'cop'){
 
 
-														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget/params.coptousd);
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget/params.coptousd);
 
 
-													}else if(project.project_budget_currency === 'eur'){
+															}else if(project.project_budget_currency === 'eur'){
 
 
-														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget*params.eurotousd);
-														
-													
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget*params.eurotousd);
+																
+															
 
-													}else{
+															}else{
 
 
-														totalFinancialFinalOrgImple = totalFinancialFinalOrgImple+project.project_budget;
-													}
+																totalFinancialFinalOrgImple = totalFinancialFinalOrgImple + (project.project_budget);
+															}
+
+											}
 									   
 
 
@@ -4078,9 +4158,7 @@ var Cluster4wprojectplanDashboardController = {
 											}
 
 												counter++;
-												//console.log("counter length: ", counter + ' -  ' +length);
-												//console.log("FINANCIAL: ", implementorgfinancial);
-
+												
 
 												if(counter === length){
 																														
@@ -4163,7 +4241,7 @@ var Cluster4wprojectplanDashboardController = {
 																						var neworgimplefinancial = {
 																							'y': parseFloat(orgimplement.TOTALBUDGET),
 																							'color':'blue',
-																							'name': orgimplementer_name+' ('+orgimplement.project_budget_currency+')',
+																							'name': orgimplement.organization+' ('+orgimplement.project_budget_currency+')',
 																							'label': (orgimplement.TOTALBUDGET / (totalFinancialFinalOrgImple))*100
 																						};
 
@@ -4193,10 +4271,7 @@ var Cluster4wprojectplanDashboardController = {
 
 									});
 
-								}/*else{
-									return res.json(200, { value: 0 });
-
-								}*///cierro verificación de cantidad de proyectos 
+								}
 
 							});
 
@@ -4262,30 +4337,67 @@ var Cluster4wprojectplanDashboardController = {
 
 									financingdonor.forEach(function(projfinancial){
 
+										if(typeof projfinancial.project_budget === 'string'){
+											var stringtonum = parseFloat(projfinancial.project_budget);
+
+										
+								            	
+
+								            if(stringtonum){
+
+								            	
+								            	
+								            	if(projfinancial.project_budget_currency === 'cop'){
+
+									         		totalFinancialFinalDonor = totalFinancialFinalDonor + (stringtonum/params.coptousd);
+														
+
+													}else if(projfinancial.project_budget_currency === 'eur'){
+
+														
+														totalFinancialFinalDonor = totalFinancialFinalDonor + (stringtonum*params.eurotousd);
+														
+													
+
+													}else{
+														
+														totalFinancialFinalDonor = totalFinancialFinalDonor + stringtonum;
+														
+
+													}
+
+												}else{
 
 
-									         	if(projfinancial.project_budget_currency === 'cop'){
+													totalFinancialFinalDonor = totalFinancialFinalDonor + 0;
 
+												}
+											}else{
+
+
+												if(projfinancial.project_budget_currency === 'cop'){
 
 														totalFinancialFinalDonor = totalFinancialFinalDonor + (projfinancial.project_budget/params.coptousd);
-
+														
 
 													}else if(projfinancial.project_budget_currency === 'eur'){
 
 
 														totalFinancialFinalDonor = totalFinancialFinalDonor + (projfinancial.project_budget*params.eurotousd);
 														
+														
 													
 
 													}else{
 
 
-														totalFinancialFinalDonor = totalFinancialFinalDonor+projfinancial.project_budget;
+														totalFinancialFinalDonor = totalFinancialFinalDonor + (projfinancial.project_budget);
+														
+
 													}
-									   
 
 
-
+											}
 
 										if(projfinancial.project_donor){
 
@@ -4331,6 +4443,8 @@ var Cluster4wprojectplanDashboardController = {
 										counter++;
 
 									    if ( counter === length ) {
+
+									    	
 
 
 									       const financingGroupByDonors = [...donorsFinancing.reduce((r, o) => {
@@ -4505,24 +4619,60 @@ var Cluster4wprojectplanDashboardController = {
 
 											if(targloc.length){
 
+												if(typeof project.project_budget === 'string'){
+													var stringtonum = parseFloat(project.project_budget);
 
-												if(project.project_budget_currency === 'cop'){
+										            	
+
+										            if(stringtonum){
+
+														if(project.project_budget_currency === 'cop'){
 
 
-														totalFinancialFinalDonors = totalFinancialFinalDonors + (project.project_budget/params.coptousd);
+																totalFinancialFinalDonors = totalFinancialFinalDonors + (stringtonum/params.coptousd);
 
 
-													}else if(project.project_budget_currency === 'eur'){
+															}else if(project.project_budget_currency === 'eur'){
 
 
-														totalFinancialFinalDonors = totalFinancialFinalDonors + (project.project_budget*params.eurotousd);
-														
-													
+																totalFinancialFinalDonors = totalFinancialFinalDonors + (stringtonum*params.eurotousd);
+																
+															
 
+															}else{
+
+
+																totalFinancialFinalDonors = totalFinancialFinalDonors + stringtonum;
+															}
+
+														}else{
+															totalFinancialFinalDonors = totalFinancialFinalDonors + 0;
+
+														}
 													}else{
 
+														if(project.project_budget_currency === 'cop'){
 
-														totalFinancialFinalDonors = totalFinancialFinalDonors+project.project_budget;
+
+																totalFinancialFinalDonors = totalFinancialFinalDonors + (project.project_budget/params.coptousd);
+
+
+															}else if(project.project_budget_currency === 'eur'){
+
+
+																totalFinancialFinalDonors = totalFinancialFinalDonors + (project.project_budget*params.eurotousd);
+																
+															
+
+															}else{
+
+
+																totalFinancialFinalDonors = totalFinancialFinalDonors + project.project_budget;
+															}
+
+														
+
+
 													}
 									   
 													if(project.project_donor){
