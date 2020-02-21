@@ -1551,10 +1551,10 @@ var Cluster4wplusDashboardController = {
 										}
 									}
 								}*/
-							]).toArray( async function (err, resultsLocations) {
+							]).toArray( function (err, resultsLocations) {
 
 							   resultsLocations.forEach(function(d,i){
-
+	 
 								const exist = locationsMarkTotal.find(locati => (locati._id.site_lat === d._id.admin2lat && locati._id.site_lng === d._id.admin2lng));
 
 								if(!exist){
@@ -1592,10 +1592,8 @@ var Cluster4wplusDashboardController = {
 
 
 					    	 // return no locations
-								if ( !locationsMarkTotal.length ) {
-                  coordinates = await AreaCentroidService.getAreaCentroid(filterObjectBenef);
-                  return res.json( 200, { 'data': { 'marker0': { layer: 'projects', lat:4.5973254, lng:-74.0759398, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } } );
-                }
+								if ( !locationsMarkTotal.length ) return res.json( 200, { 'data': { 'marker0': { layer: 'projects', lat:4.5973254, lng:-74.0759398, message: '<h5 style="text-align:center; font-size:1.5rem; font-weight:100;">NO PROJECTS</h5>' } } } );
+
 								// length
 								length = locationsMarkTotal.length;
 
@@ -2077,14 +2075,19 @@ var Cluster4wplusDashboardController = {
 										}]
 									};
 
-									//beneficiaries = [{totalBeneficiaries:0}];
+									beneficiaries = [{totalBeneficiaries:0}];
 									
 
 								}
+
+								$beneficiariesOne = beneficiaries[0];
+
+
+							
 								
 								switch (req.param('chart_for')) {
 									case 'beneficiaryAdmin1pcode':
-										if (!beneficiaries.length) {
+										if ($beneficiariesOne.totalBeneficiaries < 1 && $beneficiariesOne.totalBeneficiaries < 1) {
 											
 											var result = {	
 																	data: [{
@@ -2179,8 +2182,6 @@ var Cluster4wplusDashboardController = {
 
 									beneficiaries.forEach(function(clus,i){
 
-										
-
 										beneficiaries.totalBeneficiariesType = beneficiaries.totalBeneficiariesType+clus.totalBeneficiaries 
 
 										/*var newclusterbeneficiary = {
@@ -2203,14 +2204,19 @@ var Cluster4wplusDashboardController = {
 										}]
 									};
 
-									//beneficiaries = [{totalBeneficiaries:0}];
+									beneficiaries = [{totalBeneficiaries:0}];
 									
 
 								}
+
+								$beneficiariesOne = beneficiaries[0];
+
+
+							
 								
 								switch (req.param('chart_for')) {
 									case 'beneficiaryType':
-										if (!beneficiaries.length) {
+										if ($beneficiariesOne.totalBeneficiaries < 1 && $beneficiariesOne.totalBeneficiaries < 1) {
 											
 											var result = {	
 																	data: [{
@@ -2307,15 +2313,19 @@ var Cluster4wplusDashboardController = {
 										}]
 									};
 
-									//beneficiaries = [{totalBeneficiaries:0}];
+									beneficiaries = [{totalBeneficiaries:0}];
 									
 
 								}
+
+								$beneficiariesOne = beneficiaries[0];
+
+
+							
 								
 								switch (req.param('chart_for')) {
 									case 'beneficiaryCluster':
-
-										if (!beneficiaries.length ) {
+										if ($beneficiariesOne.totalBeneficiaries < 1 ) {
 											
 											var result = {	
 																	data: [{
@@ -2443,19 +2453,19 @@ var Cluster4wplusDashboardController = {
 										}]
 									};
 
-									//budgetprogress = [{totalBudgetProgress:0}];
+									budgetprogress = [{totalBudgetProgress:0}];
 									
 
 								}
 
-							
+							$beneficiariesOne = budgetprogress[0];
 							
 								
 								switch (req.param('chart_for')) {
 									case 'FinancingExecutorOrganization':
 
 									
-										if (!budgetprogress.length) {
+										if ($beneficiariesOne.totalBudgetProgress < 1) {
 											
 											/*result.data[0].y = 0;
 											result.data[0].label = 0;
@@ -2735,7 +2745,7 @@ var Cluster4wplusDashboardController = {
 												var neworgimplefinancial = {
 													'y': parseFloat(orgimplementer.TOTALBUDGET),
 													'color':'blue',
-													'name': orgimplementer.organization+' ('+orgimplementer.currency_id+')',
+													'name': orgimplementer_name+' ('+orgimplementer.currency_id+')',
 													'label': (orgimplementer.TOTALBUDGET / (totalFinancialFinalOrgImple))*100
 												};
 
@@ -3036,19 +3046,19 @@ var Cluster4wplusDashboardController = {
 										}]
 									};
 
-									//budgetprogress = [{totalBudgetProgress:0}];
+									budgetprogress = [{totalBudgetProgress:0}];
 									
 
 								}
 
-								
+								$financingOne = budgetprogress[0];
 
 
 							
 								
 								switch (req.param('chart_for')) {
 									case 'financingAdmin1pcode':
-										if (!budgetprogress.length) {
+										if ($financingOne.totalBudgetProgress < 1 && $financingOne.totalBudgetProgress < 1) {
 											
 											var result = {	
 																	data: [{
@@ -3181,11 +3191,12 @@ var Cluster4wplusDashboardController = {
 										}]
 									};
 
-									//budgetprogress = [{totalBudgetProgress:0}];
+									budgetprogress = [{totalBudgetProgress:0}];
 									
 
 								}
 
+								$beneficiariesBudgetOne = budgetprogress[0];
 
 								//console.log("TOTAL-1: ", budgetprogress.totalBudgetProgressCluster);
 
@@ -3196,7 +3207,7 @@ var Cluster4wplusDashboardController = {
 									case 'FinancingCluster':
 
 									//console.log("TOTAL-2: ", budgetprogress.totalBudgetProgressCluster);
-										if (!budgetprogress.length) {
+										if ($beneficiariesBudgetOne.totalBudgetProgress < 1 && $beneficiariesBudgetOne.totalBudgetProgress < 1) {
 											
 											var result = {	
 																	data: [{
